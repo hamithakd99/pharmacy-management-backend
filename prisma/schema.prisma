@@ -1,0 +1,80 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User { 
+  id    Int     @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  firstName  String
+  lastName  String
+  email String  @unique
+  password String
+  role Role @default(ADMIN)
+  contactNumber String
+  nickName String?
+  
+  addressLine1  String
+  addressLine2  String?
+  city String
+  province Province
+  postalCode String?
+}
+
+model Product {
+  id    Int     @id @default(autoincrement())
+  
+  itemCode String @unique
+  name String
+
+  brand String?
+  description String?
+
+  category String
+  batches StockBatch[]
+
+}
+
+model StockBatch {
+  Id Int @id @default(autoincrement())
+
+  batchNumber String @unique
+  productId Int
+  quantity Int
+  expiryDate DateTime
+  manufacturingDate DateTime?
+  receivedDate DateTime @default(now())
+  product Product @relation(fields: [productId], references: [id])
+  supplierId Int
+
+
+}
+
+enum Role {
+  CUSTOMER
+  EMPLOYEE
+  ADMIN
+  CASHIER
+  SUPPLIER
+}
+
+enum Province {
+  WESTERN
+  CENTRAL
+  SOUTHERN
+  NORTHERN
+  EASTERN
+  NORTH_WESTERN
+  NORTH_CENTRAL
+  UVA
+  SABARAGAMUWA
+}
