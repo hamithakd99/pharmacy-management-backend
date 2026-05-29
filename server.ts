@@ -1,10 +1,35 @@
 import express from "express"
 import userRouter from "./src/routes/authRoutes";
 import { prisma } from "./lib/prisma";
+import jwt, { JsonWebTokenError } from "jsonwebtoken"
 
 const app = express()
 
 app.use(express.json());
+
+app.use((req, res, next) => {
+    const tokenString = req.header("Authentication");
+    if (tokenString != null) {
+        const token = tokenString.replace("Bearer ", "");
+        console.log("Received token:", token);
+
+        jwt.verify(token, process.env.JWT_SECRET!,
+            (err, decoded) => {
+                if(decoded != null) {
+                    console.log("Decoded token:", decoded);
+                    (req as any).user = decoded;
+                }
+                else {
+                    console.log("Invalid Token")
+                    res.status(401).json({
+                        message : "Invalid Token"
+                    })
+                }
+            }
+        )
+    }
+
+})
 
 app.use("/user", userRouter)
 

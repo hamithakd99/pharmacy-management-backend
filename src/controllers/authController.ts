@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { prisma } from "../../lib/prisma";
+import generateToken from "../utils/generateToken";
 
 export const createUser = async (
     req: Request,
@@ -47,12 +48,25 @@ export const loginUser = async (
                     message : "Invalid Password"
                 }
             )
+        } else {
+
         }
+
+        //token generate
+        const token = generateToken
+        (
+            user.email,
+            user.firstName,
+            user.lastName,
+            user.role
+        );
+
         console.log("User logged in successfully:", user.firstName);
         return res.status(200).json(
             {
                 message : "Login Successful",
                 user : user.firstName,
+                token : token
             }
         );
 
