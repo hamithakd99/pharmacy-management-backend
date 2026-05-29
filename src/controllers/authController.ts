@@ -19,3 +19,61 @@ export const createUser = async (
 
 }
 
+export const loginUser = async (
+    req: Request,
+    res: Response
+) => {
+
+    try {
+
+        //email check
+        const user = await prisma.user.findUnique({
+            where: {
+                email: req.body.email,
+            }
+        })
+        if (!user) {
+            return res.status(404).json(
+                {
+                    message : "User Not Found"
+                }
+            )
+        }
+
+        //check password
+        if(user.password !== req.body.password) {
+            return res.status(401).json(
+                {
+                    message : "Invalid Password"
+                }
+            )
+        }
+        console.log("User logged in successfully:", user.firstName);
+        return res.status(200).json(
+            {
+                message : "Login Successful",
+                user : user.firstName,
+            }
+        );
+
+    } catch (error) {
+        console.error("Error logging in user:", error);
+
+        return res.status(500).json({
+            message : "Failed to login user",
+        })
+    }
+
+}
+
+export const getAllUsers = async (req: Request, res: Response) => {
+    try{
+        const users = await prisma.user.findMany();
+        console.log("Fetched users successfully:", users);
+        return res.status(200).json(users);
+
+    }catch(error) {
+        console.error("Error fetching users:", error);
+        return res.status(500).json({ error: "Failed to fetch users" });
+    }
+}
