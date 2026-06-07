@@ -1,7 +1,7 @@
 import express from "express"
 import userRouter from "./src/routes/authRoutes";
 import { prisma } from "./lib/prisma";
-import jwt, { JsonWebTokenError } from "jsonwebtoken"
+import jwt from "jsonwebtoken"
 
 const app = express()
 
@@ -18,6 +18,7 @@ app.use((req, res, next) => {
                 if(decoded != null) {
                     console.log("Decoded token:", decoded);
                     (req as any).user = decoded;
+                    next();
                 }
                 else {
                     console.log("Invalid Token")
@@ -27,6 +28,8 @@ app.use((req, res, next) => {
                 }
             }
         )
+    } else {
+        next();
     }
 
 })

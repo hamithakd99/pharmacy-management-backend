@@ -1,14 +1,38 @@
 import type { Request, Response } from "express";
 import { prisma } from "../../lib/prisma";
 import generateToken from "../utils/generateToken";
+import bcrypt from "bcrypt"
 
 export const createUser = async (
     req: Request,
     res:Response) => {
 
         try {
+            if(req.body.role == "Admin") {
+                if((req as any).user != null) {
+                    if((req as any).user.role != "Admin") {
+                            return res.status(403).json({ error: "Only admin users can create admin users" });
+                        }
+                    } else {
+                        return res.status(403).json({ error: "Authentication required to create admin users" });
+                    }
+            }
+            const hashedPassword = bcrypt.hashSync(req.body.password, 10)
+
+
             const user = await prisma.user.create({
-                data: req.body
+                data: {
+                    firstName : req.body.firstName,
+                    lastName : req.body.lastName,
+                    email : req.body.email,
+                    password : hashedPassword,
+                    role : req.body.role,
+                    contactNumber: req.body.contactNumber,
+                    // include required address fields (use empty string fallback if not provided)
+                    addressLine1: req.body.addressLine1,
+                    city: req.body.city,
+                    province: req.body.province,
+                }
             });
             res.status(201).json(user);
             console.log("User created successfully:", user);
@@ -41,8 +65,8 @@ export const loginUser = async (
             )
         }
 
-        //check password
-        if(user.password !== req.body.password) {
+        //check password using bcrypt
+        if(!bcrypt.compareSync(req.body.password, user.password)) {
             return res.status(401).json(
                 {
                     message : "Invalid Password"
@@ -89,5 +113,29 @@ export const getAllUsers = async (req: Request, res: Response) => {
     }catch(error) {
         console.error("Error fetching users:", error);
         return res.status(500).json({ error: "Failed to fetch users" });
+    }
+}
+
+export const deleteUser = async (
+    req: Request,
+    res: Response
+) => {
+
+    try{
+
+        if(req.body.role == "admin"){
+            
+        }
+        const userId = Number(req.params.id);
+
+        await prisma.user.delete({
+            where : {
+                id: userId
+            }
+        })
+
+        return  res.status(200).json({ message: "User deleted successfully" });
+    } catch (error) {
+        return res.status(500).json({ error: "Failed to delete user" });
     }
 }
