@@ -8,20 +8,51 @@ export const createUser = async (
     res:Response) => {
 
         try {
-            if(req.body.role == "Admin") {
-                if((req as any).user != null) {
-                    if((req as any).user.role != "Admin") {
-                            return res.status(403).json({ error: "Only admin users can create admin users" });
-                        }
-                    } else {
-                        return res.status(403).json({ error: "Authentication required to create admin users" });
-                    }
-            }
-            const hashedPassword = bcrypt.hashSync(req.body.password, 10)
+            // if(req.body.role == "Admin") {
+            //     if((req as any).user != null) {
+            //         if((req as any).user.role != "Admin") {
+            //                 return res.status(403).json({ error: "Only admin users can create admin users" });
+            //             }
+            //         } else {
+            //             return res.status(403).json({ error: "Authentication required to create admin users" });
+            //         }
+            // }
+            
+            //ROLE 
 
+            const hashedPassword = bcrypt.hashSync(req.body.password, 10)
+            const generateUserCode = async (role: string) => {
+
+                let prefix = "";
+
+                switch (req.body.role) {
+
+                    case "ADMIN":
+                        prefix = "ADM";
+                        break;
+
+                    case "CASHIER":
+                        prefix = "CAS";
+                        break;
+
+                    default:
+                        prefix = "EMP";
+                }
+
+                const count = await prisma.user.count({
+                    where: { role: req.body.role }
+                });
+
+                const year = new Date().getFullYear().toString().slice(-2);
+
+                return `${prefix}${year}${(count + 1)
+                    .toString()
+                    .padStart(4, "0")}`;
+            };
 
             const user = await prisma.user.create({
                 data: {
+                    userId: await generateUserCode(req.body.role),
                     firstName : req.body.firstName,
                     lastName : req.body.lastName,
                     email : req.body.email,
@@ -117,25 +148,55 @@ export const getAllUsers = async (req: Request, res: Response) => {
 }
 
 export const deleteUser = async (
-    req: Request,
-    res: Response
-) => {
+        req: Request,
+        res: Response
+    ) => {
 
     try{
 
         if(req.body.role == "admin"){
-            
+            const userId = Number(req.params.id);
+
+            await prisma.user.delete({
+                where : {
+                    id: userId
+                }
+            })
+            return  res.status(200).json({ message: "User deleted successfully" });
+        } else {
+            return res.status(403).json({ error: "Only admin users can delete users" });
         }
-        const userId = Number(req.params.id);
+        
 
-        await prisma.user.delete({
-            where : {
-                id: userId
-            }
-        })
-
-        return  res.status(200).json({ message: "User deleted successfully" });
     } catch (error) {
         return res.status(500).json({ error: "Failed to delete user" });
+    }
+}
+
+export const updateUser = async (req: Request, res: Response) => {
+    try {
+        const userId = Number(req.params.id);
+        const { firstName, lastName, email, role, contactNumber, addressLine1, city, province } = req.body;
+
+        const updatedUser = await prisma.user.update({
+            where: {
+                id: userId
+            },
+            data: {
+                firstName,
+                lastName,
+                email,
+                role,
+                contactNumber,
+                addressLine1,
+                city,
+                province
+            }
+        });
+
+        return res.status(200).json(updatedUser);
+    } catch (error) {
+        console.error("Error updating user:", error);
+        return res.status(500).json({ error: "Failed to update user" });
     }
 }

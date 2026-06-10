@@ -15,11 +15,12 @@ datasource db {
 model User { 
   id    Int     @id @default(autoincrement())
   createdAt DateTime @default(now())
+  userId String @unique
   firstName  String
   lastName  String
   email String  @unique
   password String
-  role Role @default(CUSTOMER)
+  role Role @default(EMPLOYEE)
   contactNumber String
   nickName String?
   
@@ -28,12 +29,31 @@ model User {
   city String
   province Province
   postalCode String?
+  suppliedBatches StockBatch[]
+}
+
+model ExternalUser {
+  id    Int     @id @default(autoincrement())
+  userId String @unique
+  firstName  String
+  lastName  String
+  email String  @unique
+  role ExternalUserRole @default(CUSTOMER)
+  contactNumber String
+  nickName String?
+  
+  addressLine1  String
+  addressLine2  String?
+  city String
+  province Province
+  postalCode String?
+
 }
 
 model Product {
   id    Int     @id @default(autoincrement())
   
-  itemCode String @unique
+  productId String @unique
   name String
 
   brand String?
@@ -42,6 +62,10 @@ model Product {
   category String
   batches StockBatch[]
 
+  sellingPrice Float
+
+
+
 }
 
 model StockBatch {
@@ -49,22 +73,23 @@ model StockBatch {
 
   batchNumber String @unique
   productId Int
-  quantity Int
+  stock Int
   expiryDate DateTime
   manufacturingDate DateTime?
   receivedDate DateTime @default(now())
   product Product @relation(fields: [productId], references: [id])
+  supplier User @relation(fields: [supplierId], references: [id])
   supplierId Int
-
-
+  buyingPrice Float
+  paymentStatus PaymentStatus @default(PENDING)
+  
 }
 
 enum Role {
-  CUSTOMER
   EMPLOYEE
   ADMIN
   CASHIER
-  SUPPLIER
+  
 }
 
 enum Province {
@@ -77,4 +102,15 @@ enum Province {
   NORTH_CENTRAL
   UVA
   SABARAGAMUWA
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  OVERDUE
+}
+
+enum ExternalUserRole {
+  CUSTOMER
+  SUPPLIER
 }
