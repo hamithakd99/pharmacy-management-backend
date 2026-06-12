@@ -8,15 +8,15 @@ export const createUser = async (
     res:Response) => {
 
         try {
-            // if(req.body.role == "Admin") {
-            //     if((req as any).user != null) {
-            //         if((req as any).user.role != "Admin") {
-            //                 return res.status(403).json({ error: "Only admin users can create admin users" });
-            //             }
-            //         } else {
-            //             return res.status(403).json({ error: "Authentication required to create admin users" });
-            //         }
-            // }
+            if(req.body.role == "Admin") {
+                if((req as any).user != null) {
+                    if((req as any).user.role != "Admin") {
+                            return res.status(403).json({ error: "Only admin users can create admin users" });
+                        }
+                    } else {
+                        return res.status(403).json({ error: "Authentication required to create admin users" });
+                    }
+            }
             
             //ROLE 
 

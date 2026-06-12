@@ -5,9 +5,50 @@ import type { ExternalUserRole } from "../../generated/prisma/browser";
 export const createUser = async (req: Request, res: Response) => {
 
     try {
+        //ADMIN ACCESS
+        const loggedUser = (req as any).user;
+        console.log("Logged User =", (req as any).user);
+
+        if (!loggedUser) {
+            return res.status(401).json({
+                message: "Unauthorized"
+            });
+        }
+
+        if (loggedUser.role !== "ADMIN") {
+            return res.status(403).json({
+                message: "Admin only"
+            });
+        }
+
+        const generateExUserCode = async (role: ExternalUserRole) => {
+
+                let prefix = "";
+
+                switch (role) {
+
+                    case "SUPPLIER":
+                        prefix = "SUP";
+                        break;
+
+                    default:
+                        prefix = "CUS";
+                }
+
+                const count = await prisma.externalUser.count({
+                    where: { role: role }
+                });
+
+                const year = new Date().getFullYear().toString().slice(-2);
+
+                return `${prefix}${year}${(count + 1)
+                    .toString()
+                    .padStart(4, "0")}`;
+            }; 
+
         const exUser = await prisma.externalUser.create({
             data: {
-                userId: req.body.userId,
+                userId: await generateExUserCode(req.body.role),
                 firstName: req.body.firstName,
                 lastName: req.body.lastName,
                 email: req.body.email,
