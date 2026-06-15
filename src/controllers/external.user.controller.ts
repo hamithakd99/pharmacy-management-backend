@@ -6,20 +6,20 @@ export const createUser = async (req: Request, res: Response) => {
 
     try {
         //ADMIN ACCESS
-        const loggedUser = (req as any).user;
-        console.log("Logged User =", (req as any).user);
+        // const loggedUser = (req as any).user;
+        // console.log("Logged User =", (req as any).user);
 
-        if (!loggedUser) {
-            return res.status(401).json({
-                message: "Unauthorized"
-            });
-        }
+        // if (!loggedUser) {
+        //     return res.status(401).json({
+        //         message: "Unauthorized"
+        //     });
+        // }
 
-        if (loggedUser.role !== "ADMIN") {
-            return res.status(403).json({
-                message: "Admin only"
-            });
-        }
+        // if (loggedUser.role !== "ADMIN") {
+        //     return res.status(403).json({
+        //         message: "Admin only"
+        //     });
+        // }
 
         const generateExUserCode = async (role: ExternalUserRole) => {
 
@@ -35,13 +35,20 @@ export const createUser = async (req: Request, res: Response) => {
                         prefix = "CUS";
                 }
 
-                const count = await prisma.externalUser.count({
-                    where: { role: role }
-                });
+                const lastUser = await prisma.externalUser.findFirst({
+                    where : {
+                        role : role
+                    },
+                    orderBy : {
+                        id : "desc"
+                    }
+                })
+                
+                const lastUserId = lastUser ? parseInt(lastUser.userId.slice(-4)) : 0;
 
                 const year = new Date().getFullYear().toString().slice(-2);
 
-                return `${prefix}${year}${(count + 1)
+                return `${prefix}${year}${(lastUserId + 1)
                     .toString()
                     .padStart(4, "0")}`;
             }; 

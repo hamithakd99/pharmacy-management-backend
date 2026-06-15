@@ -2,53 +2,27 @@ import type { Request, Response } from "express";
 import { prisma } from "../../lib/prisma";
 import generateToken from "../utils/generateToken";
 import bcrypt from "bcrypt"
+import generateUserCode from "../utils/generateUserCode";
 
 export const createUser = async (
     req: Request,
     res:Response) => {
 
         try {
-            if(req.body.role == "Admin") {
-                if((req as any).user != null) {
-                    if((req as any).user.role != "Admin") {
-                            return res.status(403).json({ error: "Only admin users can create admin users" });
-                        }
-                    } else {
-                        return res.status(403).json({ error: "Authentication required to create admin users" });
-                    }
-            }
+            // if(req.body.role == "Admin") {
+            //     if((req as any).user != null) {
+            //         if((req as any).user.role != "Admin") {
+            //                 return res.status(403).json({ error: "Only admin users can create admin users" });
+            //             }
+            //         } else {
+            //             return res.status(403).json({ error: "Authentication required to create admin users" });
+            //         }
+            // }
             
-            //ROLE 
+            //ROLE
 
             const hashedPassword = bcrypt.hashSync(req.body.password, 10)
-            const generateUserCode = async (role: string) => {
-
-                let prefix = "";
-
-                switch (req.body.role) {
-
-                    case "ADMIN":
-                        prefix = "ADM";
-                        break;
-
-                    case "CASHIER":
-                        prefix = "CAS";
-                        break;
-
-                    default:
-                        prefix = "EMP";
-                }
-
-                const count = await prisma.user.count({
-                    where: { role: req.body.role }
-                });
-
-                const year = new Date().getFullYear().toString().slice(-2);
-
-                return `${prefix}${year}${(count + 1)
-                    .toString()
-                    .padStart(4, "0")}`;
-            };
+             
 
             const user = await prisma.user.create({
                 data: {
@@ -153,19 +127,14 @@ export const deleteUser = async (
     ) => {
 
     try{
+        const userId = Number(req.params.id);
 
-        if(req.body.role == "admin"){
-            const userId = Number(req.params.id);
-
-            await prisma.user.delete({
-                where : {
-                    id: userId
-                }
-            })
-            return  res.status(200).json({ message: "User deleted successfully" });
-        } else {
-            return res.status(403).json({ error: "Only admin users can delete users" });
-        }
+        const deleteUser = await prisma.user.delete({
+            where : {
+                id: userId
+            }
+        })
+        return  res.status(200).json({ message: `${deleteUser.firstName} deleted successfully` });
         
 
     } catch (error) {
@@ -173,25 +142,42 @@ export const deleteUser = async (
     }
 }
 
+export const getOneUser = async (
+    req: Request, 
+    res: Response
+) => {
+    try {
+        const user = Number(req.params.id);
+
+        const oneUser = await prisma.user.findUnique({
+            where : {
+                id : user
+            }
+        })
+        return res.status(200).json({
+            message : `${oneUser?.firstName} fetched successfully`,
+            user : oneUser
+        })
+    } catch (error) {
+        console.error("Error fetching user:", error);
+        return res.status(500).json({ error: "Failed to fetch user" });
+    }
+}
+
 export const updateUser = async (req: Request, res: Response) => {
     try {
         const userId = Number(req.params.id);
-        const { firstName, lastName, email, role, contactNumber, addressLine1, city, province } = req.body;
+        const updateData = { ...req.body};
+
+        if (req.body.role) {
+            updateData.userId = await generateUserCode(req.body.role);
+        }
 
         const updatedUser = await prisma.user.update({
             where: {
                 id: userId
             },
-            data: {
-                firstName,
-                lastName,
-                email,
-                role,
-                contactNumber,
-                addressLine1,
-                city,
-                province
-            }
+            data: updateData,
         });
 
         return res.status(200).json(updatedUser);

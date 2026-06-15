@@ -1,7 +1,6 @@
 import express from "express"
 import userRouter from "./src/routes/authRoutes";
 import { prisma } from "./lib/prisma";
-import jwt from "jsonwebtoken"
 import externalUserRouter from "./src/routes/external.user.route";
 import authMiddleware from "./src/middlewares/authMiddleware";
 
