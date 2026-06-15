@@ -3,6 +3,7 @@ import userRouter from "./src/routes/authRoutes";
 import { prisma } from "./lib/prisma";
 import externalUserRouter from "./src/routes/external.user.route";
 import authMiddleware from "./src/middlewares/authMiddleware";
+import productRouter from "./src/routes/product.route";
 
 const app = express()
 
@@ -13,6 +14,7 @@ app.use(authMiddleware);
 
 app.use("/user", userRouter)
 app.use("/external", externalUserRouter)
+app.use("/product", productRouter)
 
 async function startServer() {
     try {

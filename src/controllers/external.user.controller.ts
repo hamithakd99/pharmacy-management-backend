@@ -1,57 +1,10 @@
 import type { Request, Response } from "express";
 import { prisma } from "../../lib/prisma";
-import type { ExternalUserRole } from "../../generated/prisma/browser";
+import generateExUserCode from "../utils/generateExternalUserCode";
 
 export const createUser = async (req: Request, res: Response) => {
 
-    try {
-        //ADMIN ACCESS
-        // const loggedUser = (req as any).user;
-        // console.log("Logged User =", (req as any).user);
-
-        // if (!loggedUser) {
-        //     return res.status(401).json({
-        //         message: "Unauthorized"
-        //     });
-        // }
-
-        // if (loggedUser.role !== "ADMIN") {
-        //     return res.status(403).json({
-        //         message: "Admin only"
-        //     });
-        // }
-
-        const generateExUserCode = async (role: ExternalUserRole) => {
-
-                let prefix = "";
-
-                switch (role) {
-
-                    case "SUPPLIER":
-                        prefix = "SUP";
-                        break;
-
-                    default:
-                        prefix = "CUS";
-                }
-
-                const lastUser = await prisma.externalUser.findFirst({
-                    where : {
-                        role : role
-                    },
-                    orderBy : {
-                        id : "desc"
-                    }
-                })
-                
-                const lastUserId = lastUser ? parseInt(lastUser.userId.slice(-4)) : 0;
-
-                const year = new Date().getFullYear().toString().slice(-2);
-
-                return `${prefix}${year}${(lastUserId + 1)
-                    .toString()
-                    .padStart(4, "0")}`;
-            }; 
+    try { 
 
         const exUser = await prisma.externalUser.create({
             data: {
@@ -68,6 +21,7 @@ export const createUser = async (req: Request, res: Response) => {
         });
         res.status(201).json({
             message: `${exUser.firstName} Registed as a ${exUser.role} successfully`,
+            data : exUser
         });
     } catch (error) {
         console.error("Error creating external user:", error);
@@ -101,26 +55,60 @@ export const getSuppliers = async (
     return res.status(200).json(suppliers);
 };
 
+export const getoneExternalUser = async (
+    req: Request,
+    res: Response
+) => {
+    try {
+        const exuserId = Number(req.params.id);
+        const externalUser = await prisma.externalUser.findUnique({
+            where: {
+                id: exuserId
+            }
+        });
+
+        if (!externalUser) {
+            return res.status(404).json({ error: "External user not found" });
+        }
+
+        return res.status(200).json(externalUser);
+    } catch (error) {
+        console.error("Error fetching external user:", error);
+        res.status(500).json({ error: "Failed to fetch external user" });
+    }
+};
+
+export const getAllExternalUsers = async (
+    req : Request,
+    res : Response
+) => {
+    try {
+        const allExternalUsers = await prisma.externalUser.findMany();
+        return res.status(200).json(allExternalUsers);
+    } catch (error) {
+        return res.status(500).json({ error: "Failed to fetch external users" });
+    }
+}
+
 export const updateExternalUser = async (
     req: Request,
     res: Response
 ) => {
     try {
         const exuserId = Number(req.params.id);
-        const { firstName, lastName, email, contactNumber, addressLine1, city, province } = req.body;
+        const updateExUser = { ...req.body };
+
+        if (req.body.role) {
+        return res.status(400).json({
+            message: "Role cannot be updated"
+        });
+        }
+
         const user = await prisma.externalUser.update({
             where : {
                 id : exuserId
             },
-            data : {
-                firstName,
-                lastName,
-                email,
-                contactNumber,
-                addressLine1,
-                city,
-                province
-            }
+            data : updateExUser
         })
         return res.status(200).json({
             message : "External user updated successfully",
