@@ -29,7 +29,6 @@ model User {
   city String
   province Province
   postalCode String?
-  suppliedBatches StockBatch[]
 }
 
 model ExternalUser {
@@ -47,6 +46,7 @@ model ExternalUser {
   city String
   province Province
   postalCode String?
+  suppliedBatches StockBatch[]
 
 }
 
@@ -56,33 +56,45 @@ model Product {
   productId String @unique
   name String
 
+
   brand String?
   description String?
 
-  category String
+  strengthValue Float? //remove optional "?" for development, add it back for production
+  strengthUnit StrengthUnit?
+  dosageForm DosageForm?
+
+  packSize Int?
+
+  categoryId Int?
+  //remove optional "?" for development, add it back for production
+  category Category? @relation(fields: [categoryId], references: [id])
   batches StockBatch[]
-
-  sellingPrice Float
-
-
 
 }
 
 model StockBatch {
-  Id Int @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
   batchNumber String @unique
   productId Int
-  stock Int
+  quantity Int
   expiryDate DateTime
   manufacturingDate DateTime?
   receivedDate DateTime @default(now())
   product Product @relation(fields: [productId], references: [id])
-  supplier User @relation(fields: [supplierId], references: [id])
+  supplier ExternalUser @relation(fields: [supplierId], references: [id])
   supplierId Int
   buyingPrice Float
+  sellingPrice Float
   paymentStatus PaymentStatus @default(PENDING)
   
+}
+
+model Category {
+  id Int @id @default(autoincrement())
+  name String @unique
+  products Product[]
 }
 
 enum Role {
@@ -108,9 +120,26 @@ enum PaymentStatus {
   PENDING
   PAID
   OVERDUE
+  PARTIAL
 }
 
 enum ExternalUserRole {
   CUSTOMER
   SUPPLIER
+}
+
+enum StrengthUnit {
+  MG
+  ML
+  G
+}
+
+enum DosageForm {
+  TABLET
+  CAPSULE
+  SYRUP
+  INJECTION
+  CREAM
+  OINTMENT
+  DROPS
 }

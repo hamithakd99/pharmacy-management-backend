@@ -10,12 +10,15 @@ export const createProduct = async (
 
         const newproduct = await prisma.product.create({
             data : {
-                productId : await generateProductCode(req.body.name),
+                productId : await generateProductCode(req.body.name, req.body.dosageForm, req.body.strengthValue),
                 name : req.body.name,
                 brand : req.body.brand,
                 category : req.body.category,
                 description : req.body.description,
-                sellingPrice : req.body.sellingPrice,
+                dosageForm : req.body.dosageForm,
+                strengthValue : req.body.strengthValue,
+                strengthUnit : req.body.strengthUnit,
+                packSize : req.body.packSize
             }
         })
         return res.status(201).json({

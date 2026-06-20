@@ -5,6 +5,7 @@ import jwt from "jsonwebtoken"
     firstName: string,
     lastName: string,
     role: string,
+    userId: string
 
 ) => {
     const token = jwt.sign(
@@ -13,6 +14,7 @@ import jwt from "jsonwebtoken"
             firstName,
             lastName,
             role,
+            userId
         },
         process.env.JWT_SECRET!,
 

@@ -87,14 +87,16 @@ export const loginUser = async (
             user.email,
             user.firstName,
             user.lastName,
-            user.role
+            user.role,
+            user.userId
         );
 
         console.log("User logged in successfully:", user.firstName);
         return res.status(200).json(
             {
                 message : "Login Successful",
-                user : user.firstName,
+                // user : user.firstName,
+                // userId : user.userId,
                 token : token
             }
         );

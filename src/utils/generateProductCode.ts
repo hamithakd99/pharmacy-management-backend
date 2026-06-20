@@ -1,29 +1,55 @@
-import { prisma } from "../../lib/prisma";
+import type { DosageForm } from "../../generated/prisma/enums";
 
-const generateProductCode = async (
-    productName : String
 
+export const generateProductCode = (
+    name: string,
+    dosageForm: DosageForm,
+    strengthValue: number
 ) => {
-    const prefix = productName.slice(0,4).toUpperCase();
 
-    const lastProduct = await prisma.product.findFirst({
-        where : {
-            productId : {
-                startsWith : prefix
-            }
-        },
-        orderBy : {
-            id : "desc"
-        }
-    });
+    const productPrefix = name
+        .trim()
+        .substring(0, 3)
+        .toUpperCase();
 
-    const lastProductNumber = lastProduct ? parseInt(lastProduct.productId.split("-")[1] ?? "0", 10) : 0;
+    let dosageCode = "";
 
-    const nextNumber = lastProductNumber + 1;
+    switch (dosageForm) {
+        case "TABLET":
+            dosageCode = "T";
+            break;
 
-    return `${prefix}-${nextNumber
+        case "CAPSULE":
+            dosageCode = "C";
+            break;
+
+        case "SYRUP":
+            dosageCode = "S";
+            break;
+
+        case "INJECTION":
+            dosageCode = "I";
+            break;
+
+        case "CREAM":
+            dosageCode = "CR";
+            break;
+
+        case "OINTMENT":
+            dosageCode = "O";
+            break;
+
+        case "DROPS":
+            dosageCode = "D";
+            break;
+
+        default:
+            dosageCode = "X";
+    }
+
+    return `${productPrefix}-${dosageCode}${strengthValue
         .toString()
-        .padStart(4, "0")}`;
-}
+        .padStart(5, "0")}`;
+};
 
 export default generateProductCode;
