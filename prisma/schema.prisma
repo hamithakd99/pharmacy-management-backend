@@ -71,6 +71,9 @@ model Product {
   category Category? @relation(fields: [categoryId], references: [id])
   batches StockBatch[]
 
+  reorderLevel Int @default(10)
+  isActive Boolean @default(true)
+
 }
 
 model StockBatch {
@@ -78,7 +81,7 @@ model StockBatch {
 
   batchNumber String @unique
   productId Int
-  quantity Int
+  receivedQuantity Int
   expiryDate DateTime
   manufacturingDate DateTime?
   receivedDate DateTime @default(now())
@@ -88,6 +91,9 @@ model StockBatch {
   buyingPrice Float
   sellingPrice Float
   paymentStatus PaymentStatus @default(PENDING)
+  totalCost Float
+  paidAmount Float @default(0)
+  invoiceNumber String?
   
 }
 

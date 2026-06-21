@@ -104,3 +104,123 @@ export const deleteProduct = async (
         return res.status(500).json({ error: "Failed to delete product" });
     }
 }
+
+export const getProductsByCategory = async (
+    req : Request,
+    res : Response
+) => {
+    try {
+        const categoryParam = req.params.category;
+        const categoryId = Number(Array.isArray(categoryParam) ? categoryParam[0] : categoryParam);
+
+        if (Number.isNaN(categoryId)) {
+            return res.status(400).json({ error: "Invalid category" });
+        }
+
+        const products = await prisma.product.findMany({
+            where : {
+                category : {
+                    is : {
+                        id : categoryId
+                    }
+                }
+            }
+        });
+        return res.status(200).json(products);
+    } catch (error) {
+        console.error("Error fetching products by category:", error);
+        return res.status(500).json({ error: "Failed to fetch products by category" });
+    }
+}
+
+export const getProductsByName = async (
+    req : Request,
+    res : Response
+) => {
+    try {
+        const nameParam = req.params.name;
+        const productName = Array.isArray(nameParam) ? nameParam[0] : nameParam;
+
+        if (!productName) {
+            return res.status(400).json({ error: "Invalid product name" });
+        }
+
+        const products = await prisma.product.findMany({
+            where : {
+                name : {
+                    contains : productName
+                }
+            }
+        });
+        return res.status(200).json(products);
+    } catch (error) {
+        console.error("Error fetching products by name:", error);
+        return res.status(500).json({ error: "Failed to fetch products by name" });
+    }
+}
+
+export const inactiveProducts = async (
+    req : Request,
+    res : Response
+) => {
+    try {
+        const products = await prisma.product.findMany({
+            where : {
+                isActive : false
+            }
+        });
+        return res.status(200).json(products);
+    } catch (error) {
+        console.error("Error fetching inactive products:", error);
+        return res.status(500).json({ error: "Failed to fetch inactive products" });
+    }
+}
+
+export const activeProducts = async (
+    req : Request,
+    res : Response
+) => {
+    try {
+        const products = await prisma.product.findMany({
+            where : {
+                isActive : true
+            }
+        });
+        return res.status(200).json(products);
+    } catch (error) {
+        console.error("Error fetching active products:", error);
+        return res.status(500).json({ error: "Failed to fetch active products" });
+    }
+}
+
+export const toggleProductStatus = async (
+    req : Request,
+    res : Response
+) => {
+    try {
+        const id = Number(req.params.id);
+        const product = await prisma.product.findUnique({
+            where: {
+                id
+            }
+        });
+
+        if (!product) {
+            return res.status(404).json({ error: "Product not found" });
+        }
+
+        const updatedProduct = await prisma.product.update({
+            where: {
+                id
+            },
+            data: {
+                isActive: !product.isActive
+            }
+        });
+
+        return res.status(200).json(updatedProduct);
+    } catch (error) {
+        console.error("Error toggling product status:", error);
+        return res.status(500).json({ error: "Failed to toggle product status" });
+    }
+}
