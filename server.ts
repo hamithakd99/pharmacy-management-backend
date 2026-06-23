@@ -6,6 +6,7 @@ import authMiddleware from "./src/middlewares/authMiddleware";
 import productRouter from "./src/routes/product.route";
 import categoryRouter from "./src/routes/category.routes";
 import cors from "cors";
+import stockBatchRouter from "./src/routes/stock.batch.routes";
 
 const app = express();
 
@@ -19,6 +20,7 @@ app.use("/user", userRouter)
 app.use("/external", externalUserRouter)
 app.use("/product", productRouter)
 app.use("/category", categoryRouter)
+app.use("/stock-batch", stockBatchRouter)
 
 async function startServer() {
     try {

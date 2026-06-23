@@ -69,7 +69,7 @@ model Product {
   categoryId Int?
   //remove optional "?" for development, add it back for production
   category Category? @relation(fields: [categoryId], references: [id])
-  batches StockBatch[]
+  stockBatchItems StockBatchItem[]
 
   reorderLevel Int @default(10)
   isActive Boolean @default(true)
@@ -80,21 +80,37 @@ model StockBatch {
   id Int @id @default(autoincrement())
 
   batchNumber String @unique
-  productId Int
-  receivedQuantity Int
-  expiryDate DateTime
-  manufacturingDate DateTime?
-  receivedDate DateTime @default(now())
-  product Product @relation(fields: [productId], references: [id])
-  supplier ExternalUser @relation(fields: [supplierId], references: [id])
+  invoiceNumber String @unique
+  
   supplierId Int
+  supplier ExternalUser @relation(fields: [supplierId], references: [id])
+
+  receivedDate DateTime @default(now())
+
+  invoiceDiscountAmount Float @default(0)
+
+  paymentStatus PaymentStatus @default(PENDING)
+
+  items StockBatchItem[]
+  
+}
+
+model StockBatchItem {
+  id Int @id @default(autoincrement())
+
+  stockBatchId Int
+  stockBatch StockBatch @relation(fields: [stockBatchId], references: [id])
+
+  productId Int
+  product Product @relation(fields: [productId], references: [id])
+
+  receivedQuantity Int
+
   buyingPrice Float
   sellingPrice Float
-  paymentStatus PaymentStatus @default(PENDING)
-  totalCost Float
-  paidAmount Float @default(0)
-  invoiceNumber String?
-  
+
+  expiryDate DateTime
+  manufacturingDate DateTime?
 }
 
 model Category {

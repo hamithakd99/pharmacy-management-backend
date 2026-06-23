@@ -192,35 +192,3 @@ export const activeProducts = async (
         return res.status(500).json({ error: "Failed to fetch active products" });
     }
 }
-
-export const toggleProductStatus = async (
-    req : Request,
-    res : Response
-) => {
-    try {
-        const id = Number(req.params.id);
-        const product = await prisma.product.findUnique({
-            where: {
-                id
-            }
-        });
-
-        if (!product) {
-            return res.status(404).json({ error: "Product not found" });
-        }
-
-        const updatedProduct = await prisma.product.update({
-            where: {
-                id
-            },
-            data: {
-                isActive: !product.isActive
-            }
-        });
-
-        return res.status(200).json(updatedProduct);
-    } catch (error) {
-        console.error("Error toggling product status:", error);
-        return res.status(500).json({ error: "Failed to toggle product status" });
-    }
-}
