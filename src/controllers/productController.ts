@@ -36,8 +36,25 @@ export const getAllProducts = async (
     res : Response
 ) => {
     try {
-        const allProducts = await prisma.product.findMany();
-        return res.status(200).json(allProducts);
+        const allProducts = await prisma.product.findMany({
+            include : {
+                stockBatchItems : true
+            }
+        });
+        const products = allProducts.map((product) => {
+            const totalStock = product.stockBatchItems.reduce(
+                (total, item) => total + item.receivedQuantity, 0
+            )
+            const lastBatch = product.stockBatchItems.at(-1);
+            return { ...product, 
+                totalStock, 
+                buyingPrice : lastBatch?.buyingPrice || 0,
+                sellingPrice : lastBatch?.sellingPrice || 0
+            };
+        });
+
+        
+        return res.status(200).json(products);
     } catch (error) {
         console.error("Error fetching products:", error);
         return res.status(500).json({ error: "Failed to fetch products" });
@@ -190,5 +207,33 @@ export const activeProducts = async (
     } catch (error) {
         console.error("Error fetching active products:", error);
         return res.status(500).json({ error: "Failed to fetch active products" });
+    }
+}
+
+const getProductBySearch = async (
+    req : Request,
+    res : Response
+) => {
+    const query = req.query.q as string;
+    try {
+        const product = await prisma.product.findMany({
+            where : {
+                name : {
+                    contains : query,
+                    mode: "insensitive",
+                },
+            },
+            take: 10,
+        });
+        return res.status(200).json({
+            data : {
+                name : product,
+                count : product.length,
+                category : product[0]?.categoryId ?? null
+            }
+        });
+    } catch (error) {
+        console.error("Error fetching product by search:", error);
+        return res.status(500).json({ error: "Failed to fetch product by search" });
     }
 }

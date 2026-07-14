@@ -27,7 +27,7 @@ export const generateInvoiceNumber = async (
     const latestInvoice = await prisma.stockBatch.findFirst({
         where: {
             invoiceNumber: {
-                startsWith: `INV-${supplier.userId}-${datePart}`
+                startsWith: `PUR-${datePart}`
             }
         },
         orderBy: {
@@ -39,10 +39,10 @@ export const generateInvoiceNumber = async (
 
     if (latestInvoice?.invoiceNumber) {
         sequence =
-            parseInt(latestInvoice.invoiceNumber.slice(-4)) + 1;
+            parseInt(latestInvoice.invoiceNumber.slice(-3)) + 1;
     }
 
-    return `PUR-${supplier.userId}-${datePart}-${sequence
+    return `PUR-${datePart}-${sequence
         .toString()
-        .padStart(4, "0")}`;
+        .padStart(3, "0")}`;
 };

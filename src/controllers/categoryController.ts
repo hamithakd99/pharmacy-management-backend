@@ -4,12 +4,21 @@ import { prisma } from "../../lib/prisma";
 export const createCategory =  async ( req : Request, res : Response
 ) => {
     try {
-        const newCategory = await prisma.category.create({
-            data : {
-                name : req.body.name
-            }
-        })
-        return res.status(201).json(newCategory);
+        const name = req.body.name?.trim();
+
+    if (!name) {
+      return res.status(400).json({
+        error: "Category name is required",
+      });
+    }
+
+    const newCategory = await prisma.category.create({
+      data: {
+        name,
+      },
+    });
+
+    return res.status(201).json(newCategory);
     } catch (error) {
         console.error("Error creating category:", error);
         return res.status(500).json({ error: "Failed to create category" });
