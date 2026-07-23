@@ -13,7 +13,7 @@ export const createProduct = async (
                 productId : await generateProductCode(req.body.name, req.body.dosageForm, req.body.strengthValue),
                 name : req.body.name,
                 brand : req.body.brand,
-                category : req.body.category,
+                categoryId : req.body.categoryId,
                 description : req.body.description,
                 dosageForm : req.body.dosageForm,
                 strengthValue : req.body.strengthValue,
