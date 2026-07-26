@@ -47,6 +47,7 @@ model ExternalUser {
   province Province
   postalCode String?
   suppliedBatches StockBatch[]
+  purchaseOrders PurchaseOrder[]
 
 }
 
@@ -70,6 +71,7 @@ model Product {
   //remove optional "?" for development, add it back for production
   category Category? @relation(fields: [categoryId], references: [id])
   stockBatchItems StockBatchItem[]
+  purchaseOrderItems PurchaseOrderItem[]
 
   reorderLevel Int @default(10)
   isActive Boolean @default(true)
@@ -119,6 +121,25 @@ model Category {
   products Product[]
 }
 
+model PurchaseOrder {
+  id Int @id @default(autoincrement())
+  orderNumber String @unique
+  supplierId Int
+  supplier ExternalUser @relation(fields: [supplierId], references: [id])
+  createdAt DateTime @default(now())
+  status PurchaseOrderStatus @default(PENDING)
+  items PurchaseOrderItem[]
+}
+
+model PurchaseOrderItem {
+  id Int @id @default(autoincrement())
+  purchaseOrderId Int
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  productId Int
+  product Product @relation(fields: [productId], references: [id])
+  quantity Int
+}
+
 enum Role {
   EMPLOYEE
   ADMIN
@@ -164,4 +185,12 @@ enum DosageForm {
   CREAM
   OINTMENT
   DROPS
+}
+
+enum PurchaseOrderStatus {
+  PENDING
+  APPROVED
+  PARTIALLY_RECEIVED
+  COMPLETED
+  CANCELLED
 }
