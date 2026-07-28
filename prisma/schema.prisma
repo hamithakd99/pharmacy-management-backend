@@ -94,6 +94,9 @@ model StockBatch {
   paymentStatus PaymentStatus @default(PENDING)
 
   items StockBatchItem[]
+
+  purchaseOrderId Int? 
+  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references:[id])
   
 }
 
@@ -107,6 +110,9 @@ model StockBatchItem {
   product Product @relation(fields: [productId], references: [id])
 
   receivedQuantity Int
+
+  purchaseOrderItemId Int?
+  purchaseOrderItem PurchaseOrderItem? @relation(fields: [purchaseOrderItemId], references: [id])
 
   buyingPrice Float
   sellingPrice Float
@@ -129,6 +135,7 @@ model PurchaseOrder {
   createdAt DateTime @default(now())
   status PurchaseOrderStatus @default(PENDING)
   items PurchaseOrderItem[]
+  stockBatch StockBatch[]
 }
 
 model PurchaseOrderItem {
@@ -138,6 +145,8 @@ model PurchaseOrderItem {
   productId Int
   product Product @relation(fields: [productId], references: [id])
   quantity Int
+
+  stockBatchItems StockBatchItem[]
 }
 
 enum Role {
