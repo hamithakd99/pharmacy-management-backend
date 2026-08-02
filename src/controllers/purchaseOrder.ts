@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { prisma } from "../../lib/prisma";
+import { generatePOcode } from "../utils/generatePuchaseOrderCode";
 
 export const createPurchaseOrder = async (
     req: Request,
@@ -10,7 +11,7 @@ export const createPurchaseOrder = async (
 
         const newPurchaseOrder = await prisma.purchaseOrder.create({
             data: {
-                orderNumber: req.body.orderNumber,
+                orderNumber: await generatePOcode(),
                 supplierId: req.body.supplierId,
                 status: req.body.status,
                 items: {
