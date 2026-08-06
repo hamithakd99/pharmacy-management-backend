@@ -4,94 +4,131 @@ import { generateBatchNumber } from "../utils/generateStockBatchCode";
 import { generateInvoiceNumber } from "../utils/generateInvoiceNumber";
 
 export const createNewBatch = async (
-    req: Request, 
+    req: Request,
     res: Response) => {
 
-        try {
-            const newStockBatch = await prisma.stockBatch.create({
-                data : {
-                    batchNumber : await generateBatchNumber(),
-                    invoiceNumber : await generateInvoiceNumber(req.body.supplierId),
-                    receivedDate : new Date(req.body.receivedDate),
-                    supplierId : req.body.supplierId,
-                    paymentStatus : req.body.paymentStatus,
-                    invoiceDiscountAmount : req.body.invoiceDiscountAmount,
-                    items : {
-                        create : req.body.items.map((item: any) => ({
-                            productId: item.productId,
-                            receivedQuantity: item.receivedQuantity,
-                            buyingPrice: item.buyingPrice,
-                            sellingPrice: item.sellingPrice,
-                            expiryDate: new Date(item.expiryDate),
-                            manufacturingDate: item.manufacturingDate ? new Date(item.manufacturingDate) : null
-                        }))
-                    }
-                },
-                include : {
-                    items : true
-                }
-            })
-            return res.status(201).json({
-                message : `Stock batch ${newStockBatch.batchNumber} created successfully`,
-                data : {
-                    batch : newStockBatch.batchNumber,
-                    invoice : newStockBatch.invoiceNumber,
-                    items : newStockBatch.items.map((item) => {
-                        return {
-                            productId: item.productId,
-                            receivedQuantity: item.receivedQuantity
-                        };
-                    })
-                }
-                
-            });
-        } catch (error) {
-            return res.status(500).json({
-                message : "Error creating stock batch",
-                error : error
-            });
-        }
-    }
-
-export const getStockBatches = async (req: Request, res: Response) => {
     try {
-        const stockBatches = await prisma.stockBatch.findMany();
-        return res.status(200).json({
-            message : "Stock batches retrieved successfully",
-            data : stockBatches
+        const newStockBatch = await prisma.stockBatch.create({
+            data: {
+                batchNumber: await generateBatchNumber(),
+                invoiceNumber: await generateInvoiceNumber(req.body.supplierId),
+                receivedDate: new Date(req.body.receivedDate),
+                supplierId: req.body.supplierId,
+                paymentStatus: req.body.paymentStatus,
+                invoiceDiscountAmount: req.body.invoiceDiscountAmount,
+                items: {
+                    create: req.body.items.map((item: any) => ({
+                        productId: item.productId,
+                        receivedQuantity: item.receivedQuantity,
+                        buyingPrice: item.buyingPrice,
+                        sellingPrice: item.sellingPrice,
+                        expiryDate: new Date(item.expiryDate),
+                        manufacturingDate: item.manufacturingDate ? new Date(item.manufacturingDate) : null
+                    }))
+                }
+            },
+            include: {
+                items: true
+            }
+        })
+        return res.status(201).json({
+            message: `Stock batch ${newStockBatch.batchNumber} created successfully`,
+            data: {
+                batch: newStockBatch.batchNumber,
+                invoice: newStockBatch.invoiceNumber,
+                items: newStockBatch.items.map((item) => {
+                    return {
+                        productId: item.productId,
+                        receivedQuantity: item.receivedQuantity
+                    };
+                })
+            }
+
         });
     } catch (error) {
         return res.status(500).json({
-            message : "Error retrieving stock batches",
-            error : error
+            message: "Error creating stock batch",
+            error: error
+        });
+    }
+}
+
+export const getStockBatches = async (req: Request, res: Response) => {
+    try {
+        const stockBatches = await prisma.stockBatch.findMany({
+            include: {
+
+                supplier: true,
+
+                purchaseOrder: true,
+
+                items: true,
+
+            },
+        });
+        return res.status(200).json({
+            message: "Stock batches retrieved successfully",
+            data: stockBatches
+        });
+    } catch (error) {
+        return res.status(500).json({
+            message: "Error retrieving stock batches",
+            error: error
         });
     }
 }
 
 export const getStockBatchById = async (req: Request, res: Response) => {
 
-    const { batchNumber } = req.params;
+    const  batchNumber  = req.params.batchNumber as string
 
     try {
         const stockBatch = await prisma.stockBatch.findUnique({
-            where : { batchNumber : batchNumber as string },
-            include : {
-                items : true
+            where: {
+                batchNumber
+            },
+
+            include: {
+
+                supplier: true,
+
+                purchaseOrder: true,
+
+                items: {
+
+                    include: {
+
+                        product: {
+
+                            include: {
+
+                                category: true
+
+                            }
+
+                        },
+
+                        purchaseOrderItem: true
+
+                    }
+
+                }
+
             }
         });
         if (!stockBatch) {
             return res.status(404).json({
-                message : "Stock batch not found"
+                message: "Stock batch not found"
             });
         }
         return res.status(200).json({
-            message : "Stock batch retrieved successfully",
-            data : stockBatch
+            message: "Stock batch retrieved successfully",
+            data: stockBatch
         });
     } catch (error) {
         return res.status(500).json({
-            message : "Error retrieving stock batch",
-            error : error
+            message: "Error retrieving stock batch",
+            error: error
         });
     }
 }
@@ -154,16 +191,16 @@ export const updateStockBatch = async (
 
                             ...(item.expiryDate
                                 ? {
-                                      expiryDate: new Date(item.expiryDate)
-                                  }
+                                    expiryDate: new Date(item.expiryDate)
+                                }
                                 : {}),
 
                             ...(item.manufacturingDate
                                 ? {
-                                      manufacturingDate: new Date(
-                                          item.manufacturingDate
-                                      )
-                                  }
+                                    manufacturingDate: new Date(
+                                        item.manufacturingDate
+                                    )
+                                }
                                 : {})
 
                         }
