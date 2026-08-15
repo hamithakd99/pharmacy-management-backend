@@ -7,6 +7,7 @@ import productRouter from "./src/routes/product.route";
 import categoryRouter from "./src/routes/category.routes";
 import cors from "cors";
 import stockBatchRouter from "./src/routes/stock.batch.routes";
+import purchaseOrderRouter from "./src/routes/purchaseOrder.routes";
 
 const app = express();
 
@@ -21,6 +22,7 @@ app.use("/external", externalUserRouter)
 app.use("/product", productRouter)
 app.use("/category", categoryRouter)
 app.use("/stock-batch", stockBatchRouter)
+app.use("/po", purchaseOrderRouter)
 
 async function startServer() {
     try {
