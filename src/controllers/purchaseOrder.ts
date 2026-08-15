@@ -7,28 +7,104 @@ export const createPurchaseOrder = async (
     res: Response) => {
 
     try {
-        const items = req.body.items;
+        const {
+            supplierId,
+            status,
+            items
+        } = req.body;
 
-        const newPurchaseOrder = await prisma.purchaseOrder.create({
-            data: {
-                orderNumber: await generatePOcode(),
-                supplierId: req.body.supplierId,
-                status: req.body.status,
-                items: {
-                    create: items.map((item: any) => ({
-                        productId: item.productId,
-                        quantity: item.quantity
-                    })),
+        if (!supplierId) {
+
+            return res.status(400).json({
+                error: "Supplier is required"
+            });
+
+        }
+
+        if (!Array.isArray(items) || items.length === 0) {
+
+            return res.status(400).json({
+                error: "At least one product is required"
+            });
+
+        }
+
+        const newPurchaseOrder =
+            await prisma.purchaseOrder.create({
+
+                data: {
+
+                    orderNumber:
+                        await generatePOcode(),
+
+                    supplierId:
+                        Number(supplierId),
+
+                    status:
+                        status ?? "PENDING",
+
+                    items: {
+
+                        create: items.map(
+                            (item: any) => ({
+
+                                productId:
+                                    Number(item.productId),
+
+                                quantity:
+                                    Number(item.quantity),
+
+                            })
+                        ),
+
+                    },
+
                 },
-            },
-            include: {
-                items: true,
-            },
+
+                include: {
+
+                    supplier: true,
+
+                    items: {
+
+                        include: {
+
+                            product: true,
+
+                        },
+
+                    },
+
+                },
+
+            });
+
+        return res.status(201).json({
+
+            message:
+                "Purchase order created successfully",
+
+            data:
+                newPurchaseOrder,
+
         });
 
-        res.status(201).json(newPurchaseOrder);
-    } catch (error) {
-        res.status(500).json({ error: "Failed to create purchase order" });
+    }
+
+    catch (error) {
+
+        console.error(
+            "Create Purchase Order Error:",
+            error
+        );
+
+        return res.status(500).json({
+
+            error:
+                "Failed to create purchase order",
+
+        });
+
     }
 }
 
@@ -38,14 +114,56 @@ export const getPurchaseOrders = async (
 ) => {
 
     try {
-        const purchaseOrders = await prisma.purchaseOrder.findMany({
-            include: {
-                items: true,
-            },
+
+        const purchaseOrders =
+            await prisma.purchaseOrder.findMany({
+
+                include: {
+
+                    supplier: true,
+
+                    items: {
+
+                        include: {
+
+                            product: true,
+
+                        },
+
+                    },
+
+                },
+
+                orderBy: {
+
+                    createdAt: "desc",
+
+                },
+
+            });
+
+        return res.status(200).json(
+
+            purchaseOrders
+
+        );
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "Get Purchase Orders Error:",
+            error
+        );
+
+        return res.status(500).json({
+
+            error:
+                "Failed to fetch purchase orders",
+
         });
-        res.status(200).json(purchaseOrders);
-    } catch (error) {
-        res.status(500).json({ error: "Failed to fetch purchase orders" });
+
     }
 }
 
@@ -58,26 +176,86 @@ export const getPurchaseOrderById = async (
 ) => {
     const { id } = req.params;
 
-    try {
-        const purchaseOrder = await prisma.purchaseOrder.findUnique({
-            where: { id: parseInt(id) },
-            include: {
-                supplier: true,
-                items: {
-                    include: {
-                        product: true,
-                    },
-                },
-            },
+    const purchaseOrderId =
+        Number(id);
+
+    if (Number.isNaN(purchaseOrderId)) {
+
+        return res.status(400).json({
+
+            error:
+                "Invalid purchase order ID",
+
         });
 
+    }
+
+    try {
+
+        const purchaseOrder =
+            await prisma.purchaseOrder.findUnique({
+
+                where: {
+
+                    id: purchaseOrderId,
+
+                },
+
+                include: {
+
+                    supplier: true,
+
+                    items: {
+
+                        include: {
+
+                            product: true,
+
+                            stockBatchItems: true,
+
+                        },
+
+                    },
+
+                    stockBatch: true,
+
+                },
+
+            });
+
         if (!purchaseOrder) {
-            return res.status(404).json({ error: "Purchase order not found" });
+
+            return res.status(404).json({
+
+                error:
+                    "Purchase order not found",
+
+            });
+
         }
 
-        res.status(200).json(purchaseOrder);
-    } catch (error) {
-        res.status(500).json({ error: "Failed to fetch purchase order" });
+        return res.status(200).json(
+
+            purchaseOrder
+
+        );
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "Get Purchase Order Error:",
+            error
+        );
+
+        return res.status(500).json({
+
+            error:
+                "Failed to fetch purchase order",
+
+        });
+
     }
 }
 
@@ -87,71 +265,243 @@ export const updatePurchaseOrder = async (
 ) => {
 
     const { id } = req.params;
-    const { supplierId, status, items } = req.body;
+
+    const purchaseOrderId =
+        Number(id);
+
+    const {
+        supplierId,
+        status,
+        items
+    } = req.body;
+
+    if (Number.isNaN(purchaseOrderId)) {
+
+        return res.status(400).json({
+
+            error:
+                "Invalid purchase order ID",
+
+        });
+
+    }
 
     try {
 
-        // Check purchase order exists
-        const existingPurchaseOrder = await prisma.purchaseOrder.findUnique({
-            where: {
-                id: Number(id),
-            },
-        });
+        /*
+        ---------------------------------------------
+        CHECK PURCHASE ORDER
+        ---------------------------------------------
+        */
+
+        const existingPurchaseOrder =
+            await prisma.purchaseOrder.findUnique({
+
+                where: {
+
+                    id: purchaseOrderId,
+
+                },
+
+                include: {
+
+                    stockBatch: true,
+
+                },
+
+            });
 
         if (!existingPurchaseOrder) {
+
             return res.status(404).json({
-                error: "Purchase order not found",
+
+                error:
+                    "Purchase order not found",
+
             });
+
         }
 
-        // Only pending purchase orders can be edited
-        if (existingPurchaseOrder.status !== "PENDING") {
+
+        /*
+        ---------------------------------------------
+        ONLY PENDING PO CAN BE EDITED
+        ---------------------------------------------
+        */
+
+        if (
+            existingPurchaseOrder.status !==
+            "PENDING"
+        ) {
+
             return res.status(400).json({
-                error: "Only pending purchase orders can be edited.",
+
+                error:
+                    "Only pending purchase orders can be edited.",
+
             });
+
         }
 
-        // Update purchase order and replace all items
-        const updatedPurchaseOrder = await prisma.purchaseOrder.update({
-            where: {
-                id: Number(id),
-            },
-            data: {
 
-                supplierId,
-                status,
+        /*
+        ---------------------------------------------
+        PO ALREADY USED IN GRN
+        ---------------------------------------------
+        */
 
-                items: {
+        if (
+            existingPurchaseOrder.stockBatch
+        ) {
 
-                    // Delete existing items
-                    deleteMany: {},
+            return res.status(400).json({
 
-                    // Create new items
-                    create: items.map((item: any) => ({
-                        productId: item.productId,
-                        quantity: item.quantity,
-                    })),
-                },
-            },
+                error:
+                    "This purchase order is already linked to a GRN and cannot be edited.",
 
-            include: {
-                supplier: true,
-                items: {
-                    include: {
-                        product: true,
-                    },
-                },
-            },
+            });
+
+        }
+
+
+        /*
+        ---------------------------------------------
+        VALIDATE ITEMS
+        ---------------------------------------------
+        */
+
+        if (
+            !Array.isArray(items) ||
+            items.length === 0
+        ) {
+
+            return res.status(400).json({
+
+                error:
+                    "At least one product is required",
+
+            });
+
+        }
+
+
+        /*
+        ---------------------------------------------
+        UPDATE
+        ---------------------------------------------
+        */
+
+        const updatedPurchaseOrder =
+            await prisma.$transaction(
+
+                async (tx) => {
+
+                    /*
+                    Delete old items
+                    */
+
+                    await tx.purchaseOrderItem.deleteMany({
+
+                        where: {
+
+                            purchaseOrderId:
+                                purchaseOrderId,
+
+                        },
+
+                    });
+
+
+                    /*
+                    Update PO + create new items
+                    */
+
+                    return await tx.purchaseOrder.update({
+
+                        where: {
+
+                            id:
+                                purchaseOrderId,
+
+                        },
+
+                        data: {
+
+                            supplierId:
+                                Number(supplierId),
+
+                            status:
+                                status ?? "PENDING",
+
+                            items: {
+
+                                create:
+                                    items.map(
+                                        (item: any) => ({
+
+                                            productId:
+                                                Number(
+                                                    item.productId
+                                                ),
+
+                                            quantity:
+                                                Number(
+                                                    item.quantity
+                                                ),
+
+                                        })
+                                    ),
+
+                            },
+
+                        },
+
+                        include: {
+
+                            supplier: true,
+
+                            items: {
+
+                                include: {
+
+                                    product: true,
+
+                                },
+
+                            },
+
+                        },
+
+                    });
+
+                }
+
+            );
+
+        return res.status(200).json({
+
+            message:
+                "Purchase order updated successfully",
+
+            data:
+                updatedPurchaseOrder,
+
         });
 
-        return res.status(200).json(updatedPurchaseOrder);
+    }
 
-    } catch (error) {
+    catch (error) {
 
-        console.error(error);
+        console.error(
+            "Update Purchase Order Error:",
+            error
+        );
 
         return res.status(500).json({
-            error: "Failed to update purchase order",
+
+            error:
+                "Failed to update purchase order",
+
         });
 
     }
@@ -165,54 +515,158 @@ export const deletePurchaseOrder = async (
 
     const { id } = req.params;
 
-    try {
+    const purchaseOrderId =
+        Number(id);
 
-        // Check purchase order exists
-        const existingPurchaseOrder = await prisma.purchaseOrder.findUnique({
-            where: {
-                id: Number(id),
-            },
-        });
+    if (Number.isNaN(purchaseOrderId)) {
 
-        if (!existingPurchaseOrder) {
-            return res.status(404).json({
-                error: "Purchase order not found",
-            });
-        }
+        return res.status(400).json({
 
-        // Only pending purchase orders can be deleted
-        if (existingPurchaseOrder.status !== "PENDING") {
-            return res.status(400).json({
-                error: "Only pending purchase orders can be deleted.",
-            });
-        }
+            error:
+                "Invalid purchase order ID",
 
-        // Delete purchase order items first
-        await prisma.purchaseOrderItem.deleteMany({
-            where: {
-                purchaseOrderId: Number(id),
-            },
-        });
-
-        // Delete purchase order
-        await prisma.purchaseOrder.delete({
-            where: {
-                id: Number(id),
-            },
-        });
-
-        return res.status(200).json({
-            message: "Purchase order deleted successfully.",
-        });
-
-    } catch (error) {
-
-        console.error(error);
-
-        return res.status(500).json({
-            error: "Failed to delete purchase order",
         });
 
     }
 
+    try {
+
+        /*
+        ---------------------------------------------
+        CHECK PURCHASE ORDER
+        ---------------------------------------------
+        */
+
+        const existingPurchaseOrder =
+            await prisma.purchaseOrder.findUnique({
+
+                where: {
+
+                    id:
+                        purchaseOrderId,
+
+                },
+
+                include: {
+
+                    stockBatch: true,
+
+                },
+
+            });
+
+        if (!existingPurchaseOrder) {
+
+            return res.status(404).json({
+
+                error:
+                    "Purchase order not found",
+
+            });
+
+        }
+
+
+        /*
+        ---------------------------------------------
+        ONLY PENDING PO CAN BE DELETED
+        ---------------------------------------------
+        */
+
+        if (
+            existingPurchaseOrder.status !==
+            "PENDING"
+        ) {
+
+            return res.status(400).json({
+
+                error:
+                    "Only pending purchase orders can be deleted.",
+
+            });
+
+        }
+
+
+        /*
+        ---------------------------------------------
+        CHECK GRN
+        ---------------------------------------------
+        */
+
+        if (
+            existingPurchaseOrder.stockBatch
+        ) {
+
+            return res.status(400).json({
+
+                error:
+                    "This purchase order is already linked to a GRN and cannot be deleted.",
+
+            });
+
+        }
+
+
+        /*
+        ---------------------------------------------
+        DELETE
+        ---------------------------------------------
+        */
+
+        await prisma.$transaction(
+
+            async (tx) => {
+
+                await tx.purchaseOrderItem.deleteMany({
+
+                    where: {
+
+                        purchaseOrderId:
+                            purchaseOrderId,
+
+                    },
+
+                });
+
+                await tx.purchaseOrder.delete({
+
+                    where: {
+
+                        id:
+                            purchaseOrderId,
+
+                    },
+
+                });
+
+            }
+
+        );
+
+        return res.status(200).json({
+
+            message:
+                "Purchase order deleted successfully",
+
+        });
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "Delete Purchase Order Error:",
+            error
+        );
+
+        return res.status(500).json({
+
+            error:
+                "Failed to delete purchase order",
+
+        });
+
+    }
+    
 };
