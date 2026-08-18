@@ -259,15 +259,263 @@ export const getPurchaseOrderById = async (
     }
 }
 
+// export const updatePurchaseOrder = async (
+//     req: Request<Params>,
+//     res: Response
+// ) => {
+
+//     const { id } = req.params;
+
+//     const purchaseOrderId =
+//         Number(id);
+
+//     const {
+//         supplierId,
+//         status,
+//         items
+//     } = req.body;
+
+//     if (Number.isNaN(purchaseOrderId)) {
+
+//         return res.status(400).json({
+
+//             error:
+//                 "Invalid purchase order ID",
+
+//         });
+
+//     }
+
+//     try {
+
+//         /*
+//         ---------------------------------------------
+//         CHECK PURCHASE ORDER
+//         ---------------------------------------------
+//         */
+
+//         const existingPurchaseOrder =
+//             await prisma.purchaseOrder.findUnique({
+
+//                 where: {
+
+//                     id: purchaseOrderId,
+
+//                 },
+
+//                 include: {
+
+//                     stockBatch: true,
+
+//                 },
+
+//             });
+
+//         if (!existingPurchaseOrder) {
+
+//             return res.status(404).json({
+
+//                 error:
+//                     "Purchase order not found",
+
+//             });
+
+//         }
+
+
+//         /*
+//         ---------------------------------------------
+//         ONLY PENDING PO CAN BE EDITED
+//         ---------------------------------------------
+//         */
+
+//         if (
+//             existingPurchaseOrder.status !==
+//             "PENDING"
+//         ) {
+
+//             return res.status(400).json({
+
+//                 error:
+//                     "Only pending purchase orders can be edited.",
+
+//             });
+
+//         }
+
+
+//         /*
+//         ---------------------------------------------
+//         PO ALREADY USED IN GRN
+//         ---------------------------------------------
+//         */
+
+//         if (
+//             existingPurchaseOrder.stockBatch
+//         ) {
+
+//             return res.status(400).json({
+
+//                 error:
+//                     "This purchase order is already linked to a GRN and cannot be edited.",
+
+//             });
+
+//         }
+
+
+//         /*
+//         ---------------------------------------------
+//         VALIDATE ITEMS
+//         ---------------------------------------------
+//         */
+
+//         if (
+//             !Array.isArray(items) ||
+//             items.length === 0
+//         ) {
+
+//             return res.status(400).json({
+
+//                 error:
+//                     "At least one product is required",
+
+//             });
+
+//         }
+
+
+//         /*
+//         ---------------------------------------------
+//         UPDATE
+//         ---------------------------------------------
+//         */
+
+//         const updatedPurchaseOrder =
+//             await prisma.$transaction(
+
+//                 async (tx) => {
+
+//                     /*
+//                     Delete old items
+//                     */
+
+//                     await tx.purchaseOrderItem.deleteMany({
+
+//                         where: {
+
+//                             purchaseOrderId:
+//                                 purchaseOrderId,
+
+//                         },
+
+//                     });
+
+
+//                     /*
+//                     Update PO + create new items
+//                     */
+
+//                     return await tx.purchaseOrder.update({
+
+//                         where: {
+
+//                             id:
+//                                 purchaseOrderId,
+
+//                         },
+
+//                         data: {
+
+//                             supplierId:
+//                                 Number(supplierId),
+
+//                             status:
+//                                 status ?? "PENDING",
+
+//                             items: {
+
+//                                 create:
+//                                     items.map(
+//                                         (item: any) => ({
+
+//                                             productId:
+//                                                 Number(
+//                                                     item.productId
+//                                                 ),
+
+//                                             quantity:
+//                                                 Number(
+//                                                     item.quantity
+//                                                 ),
+
+//                                         })
+//                                     ),
+
+//                             },
+
+//                         },
+
+//                         include: {
+
+//                             supplier: true,
+
+//                             items: {
+
+//                                 include: {
+
+//                                     product: true,
+
+//                                 },
+
+//                             },
+
+//                         },
+
+//                     });
+
+//                 }
+
+//             );
+
+//         return res.status(200).json({
+
+//             message:
+//                 "Purchase order updated successfully",
+
+//             data:
+//                 updatedPurchaseOrder,
+
+//         });
+
+//     }
+
+//     catch (error) {
+
+//         console.error(
+//             "Update Purchase Order Error:",
+//             error
+//         );
+
+//         return res.status(500).json({
+
+//             error:
+//                 "Failed to update purchase order",
+
+//         });
+
+//     }
+
+// };
+
 export const updatePurchaseOrder = async (
-    req: Request<Params>,
+    req: Request,
     res: Response
 ) => {
 
     const { id } = req.params;
 
-    const purchaseOrderId =
-        Number(id);
+    const purchaseOrderId = Number(id);
 
     const {
         supplierId,
@@ -275,58 +523,53 @@ export const updatePurchaseOrder = async (
         items
     } = req.body;
 
-    if (Number.isNaN(purchaseOrderId)) {
+
+    if (!Number.isInteger(purchaseOrderId)) {
 
         return res.status(400).json({
-
-            error:
-                "Invalid purchase order ID",
-
+            error: "Invalid purchase order ID"
         });
 
     }
 
+
     try {
 
         /*
-        ---------------------------------------------
-        CHECK PURCHASE ORDER
-        ---------------------------------------------
+        ============================================
+        FIND EXISTING PO
+        ============================================
         */
 
         const existingPurchaseOrder =
             await prisma.purchaseOrder.findUnique({
 
                 where: {
-
-                    id: purchaseOrderId,
-
+                    id: purchaseOrderId
                 },
 
                 include: {
 
-                    stockBatch: true,
+                    stockBatch: true
 
-                },
+                }
 
             });
+
 
         if (!existingPurchaseOrder) {
 
             return res.status(404).json({
-
-                error:
-                    "Purchase order not found",
-
+                error: "Purchase order not found"
             });
 
         }
 
 
         /*
-        ---------------------------------------------
+        ============================================
         ONLY PENDING PO CAN BE EDITED
-        ---------------------------------------------
+        ============================================
         */
 
         if (
@@ -337,7 +580,7 @@ export const updatePurchaseOrder = async (
             return res.status(400).json({
 
                 error:
-                    "Only pending purchase orders can be edited.",
+                    "Only pending purchase orders can be edited."
 
             });
 
@@ -345,19 +588,19 @@ export const updatePurchaseOrder = async (
 
 
         /*
-        ---------------------------------------------
-        PO ALREADY USED IN GRN
-        ---------------------------------------------
+        ============================================
+        CHECK GRN LINK
+        ============================================
         */
 
         if (
-            existingPurchaseOrder.stockBatch
+            existingPurchaseOrder.stockBatch.length > 0
         ) {
 
             return res.status(400).json({
 
                 error:
-                    "This purchase order is already linked to a GRN and cannot be edited.",
+                    "This purchase order is already linked to a GRN and cannot be edited."
 
             });
 
@@ -365,9 +608,9 @@ export const updatePurchaseOrder = async (
 
 
         /*
-        ---------------------------------------------
+        ============================================
         VALIDATE ITEMS
-        ---------------------------------------------
+        ============================================
         */
 
         if (
@@ -378,7 +621,7 @@ export const updatePurchaseOrder = async (
             return res.status(400).json({
 
                 error:
-                    "At least one product is required",
+                    "Purchase order must contain at least one item."
 
             });
 
@@ -386,97 +629,108 @@ export const updatePurchaseOrder = async (
 
 
         /*
-        ---------------------------------------------
-        UPDATE
-        ---------------------------------------------
+        ============================================
+        VALIDATE QUANTITIES
+        ============================================
+        */
+
+        const invalidItem =
+            items.find(
+                (item: any) =>
+                    !item.quantity ||
+                    Number(item.quantity) <= 0
+            );
+
+
+        if (invalidItem) {
+
+            return res.status(400).json({
+
+                error:
+                    "All product quantities must be greater than zero."
+
+            });
+
+        }
+
+
+        /*
+        ============================================
+        UPDATE PO
+        ============================================
         */
 
         const updatedPurchaseOrder =
-            await prisma.$transaction(
+            await prisma.purchaseOrder.update({
 
-                async (tx) => {
+                where: {
 
-                    /*
-                    Delete old items
-                    */
+                    id: purchaseOrderId
 
-                    await tx.purchaseOrderItem.deleteMany({
+                },
 
-                        where: {
+                data: {
 
-                            purchaseOrderId:
-                                purchaseOrderId,
+                    supplierId:
+                        Number(supplierId),
 
-                        },
+                    status,
 
-                    });
+                    items: {
+
+                        /*
+                        Remove old PO items
+                        */
+
+                        deleteMany: {},
 
 
-                    /*
-                    Update PO + create new items
-                    */
+                        /*
+                        Create updated items
+                        */
 
-                    return await tx.purchaseOrder.update({
+                        create:
 
-                        where: {
+                            items.map(
+                                (item: any) => ({
 
-                            id:
-                                purchaseOrderId,
+                                    productId:
+                                        Number(
+                                            item.productId
+                                        ),
 
-                        },
+                                    quantity:
+                                        Number(
+                                            item.quantity
+                                        )
 
-                        data: {
+                                })
+                            )
 
-                            supplierId:
-                                Number(supplierId),
+                    }
 
-                            status:
-                                status ?? "PENDING",
+                },
 
-                            items: {
+                include: {
 
-                                create:
-                                    items.map(
-                                        (item: any) => ({
+                    supplier: true,
 
-                                            productId:
-                                                Number(
-                                                    item.productId
-                                                ),
-
-                                            quantity:
-                                                Number(
-                                                    item.quantity
-                                                ),
-
-                                        })
-                                    ),
-
-                            },
-
-                        },
+                    items: {
 
                         include: {
 
-                            supplier: true,
+                            product: true
 
-                            items: {
+                        }
 
-                                include: {
+                    },
 
-                                    product: true,
-
-                                },
-
-                            },
-
-                        },
-
-                    });
+                    stockBatch: true
 
                 }
 
-            );
+            });
+
 
         return res.status(200).json({
 
@@ -484,7 +738,7 @@ export const updatePurchaseOrder = async (
                 "Purchase order updated successfully",
 
             data:
-                updatedPurchaseOrder,
+                updatedPurchaseOrder
 
         });
 
@@ -500,7 +754,7 @@ export const updatePurchaseOrder = async (
         return res.status(500).json({
 
             error:
-                "Failed to update purchase order",
+                "Failed to update purchase order"
 
         });
 
