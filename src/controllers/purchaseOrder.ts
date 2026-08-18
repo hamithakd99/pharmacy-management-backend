@@ -762,59 +762,224 @@ export const updatePurchaseOrder = async (
 
 };
 
+// export const deletePurchaseOrder = async (
+//     req: Request<Params>,
+//     res: Response
+// ) => {
+
+//     const { id } = req.params;
+
+//     const purchaseOrderId =
+//         Number(id);
+
+//     if (Number.isNaN(purchaseOrderId)) {
+
+//         return res.status(400).json({
+
+//             error:
+//                 "Invalid purchase order ID",
+
+//         });
+
+//     }
+
+//     try {
+
+//         /*
+//         ---------------------------------------------
+//         CHECK PURCHASE ORDER
+//         ---------------------------------------------
+//         */
+
+//         const existingPurchaseOrder =
+//             await prisma.purchaseOrder.findUnique({
+
+//                 where: {
+
+//                     id:
+//                         purchaseOrderId,
+
+//                 },
+
+//                 include: {
+
+//                     stockBatch: true,
+
+//                 },
+
+//             });
+
+//         if (!existingPurchaseOrder) {
+
+//             return res.status(404).json({
+
+//                 error:
+//                     "Purchase order not found",
+
+//             });
+
+//         }
+
+
+//         /*
+//         ---------------------------------------------
+//         ONLY PENDING PO CAN BE DELETED
+//         ---------------------------------------------
+//         */
+
+//         if (
+//             existingPurchaseOrder.status !==
+//             "PENDING"
+//         ) {
+
+//             return res.status(400).json({
+
+//                 error:
+//                     "Only pending purchase orders can be deleted.",
+
+//             });
+
+//         }
+
+
+//         /*
+//         ---------------------------------------------
+//         CHECK GRN
+//         ---------------------------------------------
+//         */
+
+//         if (
+//             existingPurchaseOrder.stockBatch
+//         ) {
+
+//             return res.status(400).json({
+
+//                 error:
+//                     "This purchase order is already linked to a GRN and cannot be deleted.",
+
+//             });
+
+//         }
+
+
+//         /*
+//         ---------------------------------------------
+//         DELETE
+//         ---------------------------------------------
+//         */
+
+//         await prisma.$transaction(
+
+//             async (tx) => {
+
+//                 await tx.purchaseOrderItem.deleteMany({
+
+//                     where: {
+
+//                         purchaseOrderId:
+//                             purchaseOrderId,
+
+//                     },
+
+//                 });
+
+//                 await tx.purchaseOrder.delete({
+
+//                     where: {
+
+//                         id:
+//                             purchaseOrderId,
+
+//                     },
+
+//                 });
+
+//             }
+
+//         );
+
+//         return res.status(200).json({
+
+//             message:
+//                 "Purchase order deleted successfully",
+
+//         });
+
+//     }
+
+//     catch (error) {
+
+//         console.error(
+//             "Delete Purchase Order Error:",
+//             error
+//         );
+
+//         return res.status(500).json({
+
+//             error:
+//                 "Failed to delete purchase order",
+
+//         });
+
+//     }
+    
+// };
+
 export const deletePurchaseOrder = async (
-    req: Request<Params>,
+    req: Request,
     res: Response
 ) => {
 
     const { id } = req.params;
 
-    const purchaseOrderId =
-        Number(id);
+    const purchaseOrderId = Number(id);
 
-    if (Number.isNaN(purchaseOrderId)) {
+
+    if (!Number.isInteger(purchaseOrderId)) {
 
         return res.status(400).json({
-
-            error:
-                "Invalid purchase order ID",
-
+            error: "Invalid purchase order ID"
         });
 
     }
 
+
     try {
 
         /*
-        ---------------------------------------------
-        CHECK PURCHASE ORDER
-        ---------------------------------------------
+        ============================================
+        FIND PURCHASE ORDER
+        ============================================
         */
 
         const existingPurchaseOrder =
             await prisma.purchaseOrder.findUnique({
 
                 where: {
-
-                    id:
-                        purchaseOrderId,
-
+                    id: purchaseOrderId
                 },
 
                 include: {
 
-                    stockBatch: true,
+                    stockBatch: true
 
-                },
+                }
 
             });
+
+
+        /*
+        ============================================
+        CHECK PO EXISTS
+        ============================================
+        */
 
         if (!existingPurchaseOrder) {
 
             return res.status(404).json({
 
                 error:
-                    "Purchase order not found",
+                    "Purchase order not found"
 
             });
 
@@ -822,9 +987,9 @@ export const deletePurchaseOrder = async (
 
 
         /*
-        ---------------------------------------------
+        ============================================
         ONLY PENDING PO CAN BE DELETED
-        ---------------------------------------------
+        ============================================
         */
 
         if (
@@ -835,7 +1000,7 @@ export const deletePurchaseOrder = async (
             return res.status(400).json({
 
                 error:
-                    "Only pending purchase orders can be deleted.",
+                    "Only pending purchase orders can be deleted."
 
             });
 
@@ -843,19 +1008,19 @@ export const deletePurchaseOrder = async (
 
 
         /*
-        ---------------------------------------------
-        CHECK GRN
-        ---------------------------------------------
+        ============================================
+        CHECK GRN LINK
+        ============================================
         */
 
         if (
-            existingPurchaseOrder.stockBatch
+            existingPurchaseOrder.stockBatch.length > 0
         ) {
 
             return res.status(400).json({
 
                 error:
-                    "This purchase order is already linked to a GRN and cannot be deleted.",
+                    "This purchase order is already linked to a GRN and cannot be deleted."
 
             });
 
@@ -863,45 +1028,57 @@ export const deletePurchaseOrder = async (
 
 
         /*
-        ---------------------------------------------
-        DELETE
-        ---------------------------------------------
+        ============================================
+        DELETE PO ITEMS + PO
+        ============================================
         */
 
-        await prisma.$transaction(
+        await prisma.$transaction(async (tx) => {
 
-            async (tx) => {
+            /*
+            Delete PO items
+            */
 
-                await tx.purchaseOrderItem.deleteMany({
+            await tx.purchaseOrderItem.deleteMany({
 
-                    where: {
+                where: {
 
-                        purchaseOrderId:
-                            purchaseOrderId,
+                    purchaseOrderId:
+                        purchaseOrderId
 
-                    },
+                }
 
-                });
+            });
 
-                await tx.purchaseOrder.delete({
 
-                    where: {
+            /*
+            Delete Purchase Order
+            */
 
-                        id:
-                            purchaseOrderId,
+            await tx.purchaseOrder.delete({
 
-                    },
+                where: {
 
-                });
+                    id:
+                        purchaseOrderId
 
-            }
+                }
 
-        );
+            });
+
+        });
+
+
+        /*
+        ============================================
+        SUCCESS
+        ============================================
+        */
 
         return res.status(200).json({
 
             message:
-                "Purchase order deleted successfully",
+                "Purchase order deleted successfully."
 
         });
 
@@ -917,10 +1094,10 @@ export const deletePurchaseOrder = async (
         return res.status(500).json({
 
             error:
-                "Failed to delete purchase order",
+                "Failed to delete purchase order"
 
         });
 
     }
-    
+
 };
