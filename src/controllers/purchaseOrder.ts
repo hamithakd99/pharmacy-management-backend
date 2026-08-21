@@ -170,35 +170,35 @@ export const getPurchaseOrders = async (
 interface Params {
     id: string;
 }
+
 export const getPurchaseOrderById = async (
     req: Request<Params>,
     res: Response
 ) => {
+
     const { id } = req.params;
 
-    const purchaseOrderId =
-        Number(id);
+    const purchaseOrderId = Number(id);
 
     if (Number.isNaN(purchaseOrderId)) {
 
         return res.status(400).json({
-
-            error:
-                "Invalid purchase order ID",
-
+            error: "Invalid purchase order ID",
         });
 
     }
 
     try {
 
+        // =====================================================
+        // 1. Get Purchase Order
+        // =====================================================
+
         const purchaseOrder =
             await prisma.purchaseOrder.findUnique({
 
                 where: {
-
                     id: purchaseOrderId,
-
                 },
 
                 include: {
@@ -206,43 +206,152 @@ export const getPurchaseOrderById = async (
                     supplier: true,
 
                     items: {
-
                         include: {
-
                             product: true,
-
-                            stockBatchItems: true,
-
                         },
-
                     },
-
-                    stockBatch: true,
 
                 },
 
             });
 
+
         if (!purchaseOrder) {
 
             return res.status(404).json({
-
-                error:
-                    "Purchase order not found",
-
+                error: "Purchase order not found",
             });
 
         }
 
-        return res.status(200).json(
 
-            purchaseOrder
+        // =====================================================
+        // 2. Get ALL GRN items belonging to this PO
+        // =====================================================
 
-        );
+        const grnItems =
+            await prisma.stockBatchItem.findMany({
 
-    }
+                where: {
 
-    catch (error) {
+                    stockBatch: {
+                        purchaseOrderId:
+                            purchaseOrderId,
+                    },
+
+                },
+
+                select: {
+
+                    productId: true,
+
+                    receivedQuantity: true,
+
+                },
+
+            });
+
+
+        // =====================================================
+        // 3. Calculate received + remaining
+        // =====================================================
+
+        const items =
+            purchaseOrder.items.map((item) => {
+
+
+                // Find all GRN quantities for
+                // this product under this PO
+
+                const alreadyReceived =
+                    grnItems
+                        .filter(
+                            (grnItem) =>
+                                grnItem.productId ===
+                                item.productId
+                        )
+                        .reduce(
+                            (
+                                total,
+                                grnItem
+                            ) =>
+                                total +
+                                grnItem.receivedQuantity,
+                            0
+                        );
+
+
+                // Original PO quantity
+
+                const orderedQuantity =
+                    item.quantity;
+
+
+                // Remaining quantity
+
+                const remainingQuantity =
+                    Math.max(
+                        orderedQuantity -
+                        alreadyReceived,
+                        0
+                    );
+
+
+                return {
+
+                    id:
+                        item.id,
+
+                    productId:
+                        item.productId,
+
+                    quantity:
+                        orderedQuantity,
+
+                    alreadyReceived:
+                        alreadyReceived,
+
+                    remainingQuantity:
+                        remainingQuantity,
+
+                    product:
+                        item.product,
+
+                };
+
+            });
+
+
+        // =====================================================
+        // 4. Return PO
+        // =====================================================
+
+        return res.status(200).json({
+
+            id:
+                purchaseOrder.id,
+
+            orderNumber:
+                purchaseOrder.orderNumber,
+
+            supplierId:
+                purchaseOrder.supplierId,
+
+            supplier:
+                purchaseOrder.supplier,
+
+            status:
+                purchaseOrder.status,
+
+            createdAt:
+                purchaseOrder.createdAt,
+
+            items:
+                items,
+
+        });
+
+    } catch (error) {
 
         console.error(
             "Get Purchase Order Error:",
@@ -257,7 +366,7 @@ export const getPurchaseOrderById = async (
         });
 
     }
-}
+};
 
 // export const updatePurchaseOrder = async (
 //     req: Request<Params>,
@@ -546,12 +655,6 @@ export const updatePurchaseOrder = async (
 
                 where: {
                     id: purchaseOrderId
-                },
-
-                include: {
-
-                    stockBatch: true
-
                 }
 
             });
@@ -580,27 +683,7 @@ export const updatePurchaseOrder = async (
             return res.status(400).json({
 
                 error:
-                    "Only pending purchase orders can be edited."
-
-            });
-
-        }
-
-
-        /*
-        ============================================
-        CHECK GRN LINK
-        ============================================
-        */
-
-        if (
-            existingPurchaseOrder.stockBatch.length > 0
-        ) {
-
-            return res.status(400).json({
-
-                error:
-                    "This purchase order is already linked to a GRN and cannot be edited."
+                    `Purchase order cannot be edited because its current status is ${existingPurchaseOrder.status}.`
 
             });
 
@@ -723,9 +806,7 @@ export const updatePurchaseOrder = async (
 
                         }
 
-                    },
-
-                    stockBatch: true
+                    }
 
                 }
 
@@ -922,7 +1003,7 @@ export const updatePurchaseOrder = async (
 //         });
 
 //     }
-    
+
 // };
 
 export const deletePurchaseOrder = async (
