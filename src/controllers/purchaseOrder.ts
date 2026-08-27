@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { prisma } from "../../lib/prisma";
 import { generatePOcode } from "../utils/generatePuchaseOrderCode";
+import { getPurchaseOrderDetails } from "../services/purchaseOrder/getPurchaseOrderDetails.service";
 
 export const createPurchaseOrder = async (
     req: Request,
@@ -167,206 +168,284 @@ export const getPurchaseOrders = async (
     }
 }
 
+
+// export const getPurchaseOrderById = async (
+//     req: Request<Params>,
+//     res: Response
+// ) => {
+
+//     const { id } = req.params;
+
+//     const purchaseOrderId = Number(id);
+
+//     if (Number.isNaN(purchaseOrderId)) {
+
+//         return res.status(400).json({
+//             error: "Invalid purchase order ID",
+//         });
+
+//     }
+
+//     try {
+
+//         // =====================================================
+//         // 1. Get Purchase Order
+//         // =====================================================
+
+//         const purchaseOrder =
+//             await prisma.purchaseOrder.findUnique({
+
+//                 where: {
+//                     id: purchaseOrderId,
+//                 },
+
+//                 include: {
+
+//                     supplier: true,
+
+//                     items: {
+//                         include: {
+//                             product: true,
+//                         },
+//                     },
+
+//                 },
+
+//             });
+
+
+//         if (!purchaseOrder) {
+
+//             return res.status(404).json({
+//                 error: "Purchase order not found",
+//             });
+
+//         }
+
+
+//         // =====================================================
+//         // 2. Get ALL GRN items belonging to this PO
+//         // =====================================================
+
+//         const grnItems =
+//             await prisma.stockBatchItem.findMany({
+
+//                 where: {
+
+//                     stockBatch: {
+//                         purchaseOrderId:
+//                             purchaseOrderId,
+//                     },
+
+//                 },
+
+//                 select: {
+
+//                     productId: true,
+
+//                     receivedQuantity: true,
+
+//                 },
+
+//             });
+
+
+//         // =====================================================
+//         // 3. Calculate received + remaining
+//         // =====================================================
+
+//         const items =
+//             purchaseOrder.items.map((item) => {
+
+
+//                 // Find all GRN quantities for
+//                 // this product under this PO
+
+//                 const alreadyReceived =
+//                     grnItems
+//                         .filter(
+//                             (grnItem) =>
+//                                 grnItem.productId ===
+//                                 item.productId
+//                         )
+//                         .reduce(
+//                             (
+//                                 total,
+//                                 grnItem
+//                             ) =>
+//                                 total +
+//                                 grnItem.receivedQuantity,
+//                             0
+//                         );
+
+
+//                 // Original PO quantity
+
+//                 const orderedQuantity =
+//                     item.quantity;
+
+
+//                 // Remaining quantity
+
+//                 const remainingQuantity =
+//                     Math.max(
+//                         orderedQuantity -
+//                         alreadyReceived,
+//                         0
+//                     );
+
+
+//                 return {
+
+//                     id:
+//                         item.id,
+
+//                     productId:
+//                         item.productId,
+
+//                     quantity:
+//                         orderedQuantity,
+
+//                     alreadyReceived:
+//                         alreadyReceived,
+
+//                     remainingQuantity:
+//                         remainingQuantity,
+
+//                     product:
+//                         item.product,
+
+//                 };
+
+//             });
+
+
+//         // =====================================================
+//         // 4. Return PO
+//         // =====================================================
+
+//         return res.status(200).json({
+
+//             id:
+//                 purchaseOrder.id,
+
+//             orderNumber:
+//                 purchaseOrder.orderNumber,
+
+//             supplierId:
+//                 purchaseOrder.supplierId,
+
+//             supplier:
+//                 purchaseOrder.supplier,
+
+//             status:
+//                 purchaseOrder.status,
+
+//             createdAt:
+//                 purchaseOrder.createdAt,
+
+//             items:
+//                 items,
+
+//         });
+
+//     } catch (error) {
+
+//         console.error(
+//             "Get Purchase Order Error:",
+//             error
+//         );
+
+//         return res.status(500).json({
+
+//             error:
+//                 "Failed to fetch purchase order",
+
+//         });
+
+//     }
+// };
+
 interface Params {
     id: string;
 }
 
-export const getPurchaseOrderById = async (
-    req: Request<Params>,
-    res: Response
-) => {
 
-    const { id } = req.params;
+export const getPurchaseOrderById =
+    async (
+        req: Request<Params>,
+        res: Response
+    ) => {
 
-    const purchaseOrderId = Number(id);
+        const purchaseOrderId =
+            Number(
+                req.params.id
+            );
 
-    if (Number.isNaN(purchaseOrderId)) {
-
-        return res.status(400).json({
-            error: "Invalid purchase order ID",
-        });
-
-    }
-
-    try {
 
         // =====================================================
-        // 1. Get Purchase Order
+        // VALIDATE ID
         // =====================================================
 
-        const purchaseOrder =
-            await prisma.purchaseOrder.findUnique({
+        if (
+            Number.isNaN(
+                purchaseOrderId
+            )
+        ) {
 
-                where: {
-                    id: purchaseOrderId,
-                },
+            return res.status(400).json({
 
-                include: {
+                error:
+                    "Invalid purchase order ID"
 
-                    supplier: true,
-
-                    items: {
-                        include: {
-                            product: true,
-                        },
-                    },
-
-                },
-
-            });
-
-
-        if (!purchaseOrder) {
-
-            return res.status(404).json({
-                error: "Purchase order not found",
             });
 
         }
 
 
-        // =====================================================
-        // 2. Get ALL GRN items belonging to this PO
-        // =====================================================
+        try {
 
-        const grnItems =
-            await prisma.stockBatchItem.findMany({
+            // =================================================
+            // GET PO DETAILS
+            // =================================================
 
-                where: {
+            const purchaseOrder = await getPurchaseOrderDetails( purchaseOrderId );
 
-                    stockBatch: {
-                        purchaseOrderId:
-                            purchaseOrderId,
-                    },
+            if (!purchaseOrder) {
 
-                },
+                return res.status(404).json({
 
-                select: {
+                    error:
+                        "Purchase order not found"
 
-                    productId: true,
+                });
 
-                    receivedQuantity: true,
+            }
 
-                },
+            return res.status(200).json(
+                purchaseOrder
+            );
 
-            });
+        }
 
+        catch (error) {
 
-        // =====================================================
-        // 3. Calculate received + remaining
-        // =====================================================
-
-        const items =
-            purchaseOrder.items.map((item) => {
+            console.error(
+                "Get Purchase Order Error:",
+                error
+            );
 
 
-                // Find all GRN quantities for
-                // this product under this PO
+            return res.status(500).json({
 
-                const alreadyReceived =
-                    grnItems
-                        .filter(
-                            (grnItem) =>
-                                grnItem.productId ===
-                                item.productId
-                        )
-                        .reduce(
-                            (
-                                total,
-                                grnItem
-                            ) =>
-                                total +
-                                grnItem.receivedQuantity,
-                            0
-                        );
-
-
-                // Original PO quantity
-
-                const orderedQuantity =
-                    item.quantity;
-
-
-                // Remaining quantity
-
-                const remainingQuantity =
-                    Math.max(
-                        orderedQuantity -
-                        alreadyReceived,
-                        0
-                    );
-
-
-                return {
-
-                    id:
-                        item.id,
-
-                    productId:
-                        item.productId,
-
-                    quantity:
-                        orderedQuantity,
-
-                    alreadyReceived:
-                        alreadyReceived,
-
-                    remainingQuantity:
-                        remainingQuantity,
-
-                    product:
-                        item.product,
-
-                };
+                error:
+                    "Failed to fetch purchase order"
 
             });
 
+        }
 
-        // =====================================================
-        // 4. Return PO
-        // =====================================================
-
-        return res.status(200).json({
-
-            id:
-                purchaseOrder.id,
-
-            orderNumber:
-                purchaseOrder.orderNumber,
-
-            supplierId:
-                purchaseOrder.supplierId,
-
-            supplier:
-                purchaseOrder.supplier,
-
-            status:
-                purchaseOrder.status,
-
-            createdAt:
-                purchaseOrder.createdAt,
-
-            items:
-                items,
-
-        });
-
-    } catch (error) {
-
-        console.error(
-            "Get Purchase Order Error:",
-            error
-        );
-
-        return res.status(500).json({
-
-            error:
-                "Failed to fetch purchase order",
-
-        });
-
-    }
-};
+    };
 
 // export const updatePurchaseOrder = async (
 //     req: Request<Params>,
