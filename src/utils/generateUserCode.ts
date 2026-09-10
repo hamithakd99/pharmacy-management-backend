@@ -1,40 +1,53 @@
-import type { Role } from "../../generated/prisma/enums";
 import { prisma } from "../../lib/prisma";
 
-const generateUserCode = async (role: Role) => {
+const generateUserCode = async () => {
 
-                let prefix = "";
+    const year =
+        new Date()
+            .getFullYear()
+            .toString()
+            .slice(-2);
 
-                switch (role) {
-
-                    case "ADMIN":
-                        prefix = "ADM";
-                        break;
-
-                    case "CASHIER":
-                        prefix = "CAS";
-                        break;
-
-                    default:
-                        prefix = "EMP";
+    const lastUser =
+        await prisma.user.findFirst({
+            where: {
+                userId: {
+                    startsWith: `EMP${year}`
                 }
+            },
+            orderBy: {
+                id: "desc"
+            }
+        });
 
-                const lastUser = await prisma.user.findFirst({
-                    where : {
-                        role : role
-                    },
-                    orderBy : {
-                        id : "desc"
-                    }
-                })
+    let lastSequence = 0;
 
-                const lastUserId = lastUser ? parseInt(lastUser.userId.slice(-4)): 0;
+    if (lastUser) {
 
-                const year = new Date().getFullYear().toString().slice(-2);
+        const lastTwoDigits =
+            lastUser.userId.slice(-2);
 
-                return `${prefix}${year}${(lastUserId + 1)
-                    .toString()
-                    .padStart(4, "0")}`;
-            };
+        lastSequence =
+            parseInt(
+                lastTwoDigits,
+                10
+            ) || 0;
+    }
 
-            export default generateUserCode;
+    const nextSequence =
+        lastSequence + 1;
+
+    if (nextSequence > 99) {
+
+        throw new Error(
+            "Maximum user ID sequence reached for this year"
+        );
+    }
+
+    return `EMP${year}${nextSequence
+        .toString()
+        .padStart(2, "0")}`;
+
+};
+
+export default generateUserCode;
