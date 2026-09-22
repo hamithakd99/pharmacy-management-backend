@@ -157,16 +157,17 @@ export const createGRNService = async (
                             purchaseOrderId: purchaseOrderId,
                             items: {
                                 create:
-                                data.items.map(
+                                    data.items.map(
                                         (item) => ({
 
-                                            productId:Number(item.productId),
+                                            productId: Number(item.productId),
                                             purchaseOrderItemId: Number(item.purchaseOrderItemId),
-                                            receivedQuantity:Number(item.receivedQuantity),
-                                            buyingPrice:Number(item.buyingPrice),
-                                            sellingPrice:Number(item.sellingPrice),
+                                            receivedQuantity: Number(item.receivedQuantity),
+                                            availableQuantity: Number(item.receivedQuantity),
+                                            buyingPrice: Number(item.buyingPrice),
+                                            sellingPrice: Number(item.sellingPrice),
                                             expiryDate: new Date(item.expiryDate),
-                                            manufacturingDate: item.manufacturingDate ? new Date(item.manufacturingDate): null
+                                            manufacturingDate: item.manufacturingDate ? new Date(item.manufacturingDate) : null
 
                                         })
                                     )
@@ -179,6 +180,14 @@ export const createGRNService = async (
                             items: true
                         }
 
+                    });
+                    await tx.stockMovement.createMany({
+                        data: newStockBatch.items.map((item) => ({
+                            stockBatchItemId: item.id,
+                            productId: item.productId,
+                            type: "GRN",
+                            quantity: item.receivedQuantity
+                        }))
                     });
 
 
@@ -211,16 +220,16 @@ export const createGRNService = async (
             `Stock batch ${result.batchNumber} created successfully`,
 
         data: {
-            batch:result.batchNumber,
+            batch: result.batchNumber,
             invoice: result.invoiceNumber,
             purchaseOrderId,
-            purchaseOrderStatus:updatedPO.status,
+            purchaseOrderStatus: updatedPO.status,
             items:
                 result.items.map(
                     (item) => ({
-                        productId:item.productId,
-                        purchaseOrderItemId:item.purchaseOrderItemId,
-                        receivedQuantity:item.receivedQuantity
+                        productId: item.productId,
+                        purchaseOrderItemId: item.purchaseOrderItemId,
+                        receivedQuantity: item.receivedQuantity
                     })
                 )
 

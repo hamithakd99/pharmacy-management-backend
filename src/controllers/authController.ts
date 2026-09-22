@@ -116,7 +116,7 @@ export const loginUser = async (
 export const getAllUsers = async (req: Request, res: Response) => {
     try {
         const users = await prisma.user.findMany();
-        console.log("Fetched users successfully:", users);
+        // console.log("Fetched users successfully:", users);
         return res.status(200).json(users);
 
     } catch (error) {

@@ -29,6 +29,7 @@ model User {
   city String
   province Province
   postalCode String?
+  orders Order[]
 }
 
 model ExternalUser {
@@ -48,6 +49,7 @@ model ExternalUser {
   postalCode String?
   suppliedBatches StockBatch[]
   purchaseOrders PurchaseOrder[]
+  orders Order[]
 
 }
 
@@ -75,6 +77,9 @@ model Product {
 
   reorderLevel Int @default(10)
   isActive Boolean @default(true)
+
+  orderItems OrderItem[]
+  stockMovements StockMovement[]
 
 }
 
@@ -110,6 +115,10 @@ model StockBatchItem {
   product Product @relation(fields: [productId], references: [id])
 
   receivedQuantity Int
+  availableQuantity Int
+
+  orderItems OrderItem[]
+  stockMovements StockMovement[]
 
   purchaseOrderItemId Int?
   purchaseOrderItem PurchaseOrderItem? @relation(fields: [purchaseOrderItemId], references: [id])
@@ -147,6 +156,99 @@ model PurchaseOrderItem {
   quantity Int
 
   stockBatchItems StockBatchItem[]
+}
+
+model Order {
+    id Int @id @default(autoincrement())
+    orderNumber String @unique
+    createdAt DateTime @default(now())
+
+    customerId Int?
+    customer ExternalUser? @relation(fields: [customerId], references: [id])
+
+    cashierId String
+    cashier User @relation(fields: [cashierId], references: [userId])
+
+    status OrderStatus @default(COMPLETED)
+    paymentStatus OrderPaymentStatus @default(PENDING)
+    paymentMethod PaymentMethod?
+
+    subtotal Float @default(0)
+    discountAmount Float @default(0)
+    totalAmount Float @default(0)
+
+    items OrderItem[]
+    stockMovements StockMovement[]
+}
+
+
+model OrderItem {
+    id Int @id @default(autoincrement())
+
+    orderId Int
+    order Order @relation(fields: [orderId], references: [id])
+
+    productId Int
+    product Product @relation(fields: [productId], references: [id])
+
+    stockBatchItemId Int
+    stockBatchItem StockBatchItem @relation(fields: [stockBatchItemId], references: [id])
+
+    quantity Int
+    sellingPrice Float
+    lineTotal Float
+
+    stockMovements StockMovement[]
+}
+
+model StockMovement {
+    id Int @id @default(autoincrement())
+    createdAt DateTime @default(now())
+
+    stockBatchItemId Int
+    stockBatchItem StockBatchItem @relation( fields: [stockBatchItemId], references: [id] )
+
+    productId Int
+    product Product @relation( fields: [productId], references: [id] )
+
+    type StockMovementType
+
+    quantity Int
+
+    orderId Int?
+    order Order? @relation( fields: [orderId], references: [id] )
+
+    orderItemId Int?
+    orderItem OrderItem? @relation( fields: [orderItemId], references: [id] )
+
+    note String?
+}
+
+enum StockMovementType {
+    GRN
+    SALE
+    RETURN
+    ADJUSTMENT
+}
+
+enum OrderStatus {
+    DRAFT
+    COMPLETED
+    CANCELLED
+}
+
+enum OrderPaymentStatus {
+    PENDING
+    PAID
+    PARTIAL
+    REFUNDED
+}
+
+enum PaymentMethod {
+    CASH
+    CARD
+    BANK_TRANSFER
+    OTHER
 }
 
 enum Role {
