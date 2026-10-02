@@ -405,7 +405,7 @@ export const createOrder = async (
                                     authUser.userId,
 
                                 status:
-                                    "COMPLETED",
+                                    "PENDING",
 
                                 paymentStatus:
                                     paymentStatus,

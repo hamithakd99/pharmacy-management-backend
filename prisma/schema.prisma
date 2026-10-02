@@ -232,7 +232,8 @@ enum StockMovementType {
 }
 
 enum OrderStatus {
-    DRAFT
+    PENDING
+    CONFIRMED
     COMPLETED
     CANCELLED
 }
