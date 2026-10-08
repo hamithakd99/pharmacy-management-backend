@@ -41,26 +41,45 @@ export const getAllProducts = async (
                 stockBatchItems: true
             }
         });
+
+        // const now = new Date();
+
         const products = allProducts.map((product) => {
             const totalStock = product.stockBatchItems.reduce(
-                (total, item) => total + item.receivedQuantity, 0
-            )
-            const lastBatch = product.stockBatchItems.at(-1);
+                (total, item) => total + item.availableQuantity,
+                0
+            );
+
+            // const lastBatch = product.stockBatchItems[0];
+
+            const currentBatch = product.stockBatchItems
+                .filter(
+                    (item) =>
+                        item.availableQuantity > 0 &&
+                        new Date(item.expiryDate) > new Date()
+                )
+                .sort(
+                    (a, b) =>
+                        new Date(a.expiryDate).getTime() -
+                        new Date(b.expiryDate).getTime()
+                )[0];
+
             return {
                 ...product,
                 totalStock,
-                buyingPrice: lastBatch?.buyingPrice || 0,
-                sellingPrice: lastBatch?.sellingPrice || 0
+                buyingPrice: currentBatch?.buyingPrice || 0,
+                sellingPrice: currentBatch?.sellingPrice || 0
             };
         });
-
 
         return res.status(200).json(products);
     } catch (error) {
         console.error("Error fetching products:", error);
-        return res.status(500).json({ error: "Failed to fetch products" });
+        return res.status(500).json({
+            error: "Failed to fetch products"
+        });
     }
-}
+};
 
 export const getProductDetails = async (
     req: Request,
@@ -70,37 +89,37 @@ export const getProductDetails = async (
 
         const id = Number(req.params.id);
         const product = await prisma.product.findUnique({
-    
+
             where: {
-    
+
                 id
-    
+
             },
-    
+
             include: {
-    
+
                 category: true,
-    
+
                 stockBatchItems: {
-    
+
                     include: {
-    
+
                         stockBatch: {
-    
+
                             include: {
-    
+
                                 supplier: true
-    
+
                             }
-    
+
                         }
-    
+
                     }
-    
+
                 }
-    
+
             }
-    
+
         });
         return res.status(200).json(product);
     } catch (error) {

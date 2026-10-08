@@ -554,7 +554,9 @@ export const createNewBatch = async (
                             productId: Number(item.productId),
                             purchaseOrderItemId: Number(item.purchaseOrderItemId),
                             receivedQuantity: Number(item.receivedQuantity),
-                            buyingPrice: Number(item.buyingPrice), sellingPrice: Number(item.sellingPrice),
+                            availableQuantity: Number(item.receivedQuantity),
+                            buyingPrice: Number(item.buyingPrice), 
+                            sellingPrice: Number(item.sellingPrice),
                             expiryDate: item.expiryDate,
                             manufacturingDate: item.manufacturingDate ?? null
 

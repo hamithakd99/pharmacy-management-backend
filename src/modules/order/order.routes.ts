@@ -1,5 +1,5 @@
 import express from "express"
-import { allOrders, cancelOrder, createOrder, getOrderById, updateOrderPayment, } from "./order.controller"
+import { allOrders, cancelOrder, createOrder, getOrderById, updateOrderPayment, updateOrderStatus, } from "./order.controller"
 
 const orderRouter = express.Router()
 
@@ -7,6 +7,7 @@ orderRouter.post("/", createOrder)
 orderRouter.get("/", allOrders)
 orderRouter.get("/:id", getOrderById)
 orderRouter.patch("/:id/payment", updateOrderPayment)
+orderRouter.patch("/:id/status", updateOrderStatus)
 orderRouter.put("/:id/cancel", cancelOrder)
 
 // orderRouter.get("/customer/:id", createOrder)
