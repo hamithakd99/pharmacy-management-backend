@@ -87,10 +87,10 @@ model StockBatch {
   id Int @id @default(autoincrement())
 
   batchNumber String @unique
-  invoiceNumber String @unique
+  invoiceNumber String? @unique
   
-  supplierId Int
-  supplier ExternalUser @relation(fields: [supplierId], references: [id])
+  supplierId Int?
+  supplier ExternalUser? @relation(fields: [supplierId], references: [id])
 
   receivedDate DateTime @default(now())
 
@@ -227,6 +227,7 @@ model StockMovement {
 
 enum StockMovementType {
     GRN
+    OPENING_STOCK
     SALE
     RETURN
     ADJUSTMENT
