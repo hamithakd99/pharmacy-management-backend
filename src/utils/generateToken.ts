@@ -1,25 +1,32 @@
-import jwt from "jsonwebtoken"
+import jwt from "jsonwebtoken";
 
- const generateToken = (
-    email: string,
-    firstName: string,
-    lastName: string,
-    role: string,
-    userId: string
+const generateToken = (
+  email: string,
+  firstName: string,
+  lastName: string,
+  role: string,
+  userId: string
+): string => {
+  const secret = process.env.JWT_SECRET;
 
-) => {
-    const token = jwt.sign(
-        {
-            email,
-            firstName,
-            lastName,
-            role,
-            userId
-        },
-        process.env.JWT_SECRET!,
+  if (!secret) {
+    throw new Error("JWT_SECRET is not configured");
+  }
 
-    );
-    return token;
+  return jwt.sign(
+    {
+      email,
+      firstName,
+      lastName,
+      role,
+      userId,
+    },
+    secret,
+    {
+      expiresIn: "15m",
+      algorithm: "HS256",
+    }
+  );
 };
 
 export default generateToken;

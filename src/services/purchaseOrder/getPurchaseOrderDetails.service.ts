@@ -8,14 +8,14 @@ export const getPurchaseOrderDetails =
         purchaseOrderId: number
     ) => {
 
-        console.log(
-            "========== GET PO DETAILS =========="
-        );
+        // console.log(
+        //     "========== GET PO DETAILS =========="
+        // );
 
-        console.log(
-            "Purchase Order ID:",
-            purchaseOrderId
-        );
+        // console.log(
+        //     "Purchase Order ID:",
+        //     purchaseOrderId
+        // );
 
         // =====================================================
         // GET PURCHASE ORDER
@@ -127,19 +127,19 @@ export const getPurchaseOrderDetails =
         // =====================================================
         // GET COMPLETE GRN HISTORY
         // =====================================================
-        console.log(
-            "PO ID:",
-            purchaseOrder.id
-        );
+        // console.log(
+        //     "PO ID:",
+        //     purchaseOrder.id
+        // );
 
-        console.log(
-            "PO STOCK BATCHES:",
-            JSON.stringify(
-                purchaseOrder.stockBatch,
-                null,
-                2
-            )
-        );
+        // console.log(
+        //     "PO STOCK BATCHES:",
+        //     JSON.stringify(
+        //         purchaseOrder.stockBatch,
+        //         null,
+        //         2
+        //     )
+        // );
 
         const receivingHistory =
             getGRNHistory(

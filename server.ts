@@ -15,11 +15,12 @@ const app = express();
 app.use(cors())
 app.use(express.json());
 
+app.use("/user", userRouter)
+app.use("/external", externalUserRouter)
+
 //authentication
 app.use(authMiddleware);
 
-app.use("/user", userRouter)
-app.use("/external", externalUserRouter)
 app.use("/product", productRouter)
 app.use("/category", categoryRouter)
 app.use("/stock-batch", stockBatchRouter)

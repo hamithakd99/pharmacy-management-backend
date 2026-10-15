@@ -3,6 +3,7 @@ import { prisma } from "../../lib/prisma";
 import { generateBatchNumber } from "../utils/generateStockBatchCode";
 import { generateInvoiceNumber } from "../utils/generateInvoiceNumber";
 import { createGRNService } from "../services/grn/createGRN.service";
+import { createOpeningStockService } from "../services/openingStock/createOpeningStock.service";
 
 // export const createNewBatch = async (
 //     req: Request,
@@ -555,7 +556,7 @@ export const createNewBatch = async (
                             purchaseOrderItemId: Number(item.purchaseOrderItemId),
                             receivedQuantity: Number(item.receivedQuantity),
                             availableQuantity: Number(item.receivedQuantity),
-                            buyingPrice: Number(item.buyingPrice), 
+                            buyingPrice: Number(item.buyingPrice),
                             sellingPrice: Number(item.sellingPrice),
                             expiryDate: item.expiryDate,
                             manufacturingDate: item.manufacturingDate ?? null
@@ -739,13 +740,13 @@ export const updateStockBatch = async (
                             receivedQuantity: item.receivedQuantity ?? undefined,
                             buyingPrice: item.buyingPrice ?? undefined,
                             sellingPrice: item.sellingPrice ?? undefined,
-                            ...(item.expiryDate ? 
+                            ...(item.expiryDate ?
                                 {
                                     expiryDate: new Date(item.expiryDate)
                                 }
                                 : {}),
 
-                            ...(item.manufacturingDate ? 
+                            ...(item.manufacturingDate ?
                                 {
                                     manufacturingDate: new Date(
                                         item.manufacturingDate
@@ -793,3 +794,44 @@ export const updateStockBatch = async (
     }
 
 }
+
+export const createBulkOpeningStock = async (
+    req: Request,
+    res: Response
+) => {
+    try {
+        const { items, receivedDate } = req.body;
+
+        if (!Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({
+                message: "At least one opening stock item is required."
+            });
+        }
+
+        const result = await createOpeningStockService({
+            receivedDate,
+            items: items.map((item: any) => ({
+                productId: Number(item.productId),
+                receivedQuantity: Number(item.receivedQuantity),
+                buyingPrice: Number(item.buyingPrice),
+                sellingPrice: Number(item.sellingPrice),
+                expiryDate: item.expiryDate,
+                manufacturingDate: item.manufacturingDate ?? null
+            }))
+        });
+
+        return res.status(result.statusCode).json({
+            message: result.message,
+            ...(result.data ? { data: result.data } : {})
+        });
+    } catch (error) {
+        console.error("Create opening stock error:", error);
+
+        return res.status(500).json({
+            message: "Failed to create opening stock.",
+            error: error instanceof Error
+                ? error.message
+                : String(error)
+        });
+    }
+};

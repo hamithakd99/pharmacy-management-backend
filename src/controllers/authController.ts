@@ -29,7 +29,7 @@ export const createUser = async (
                 userId: await generateUserCode(),
                 firstName: req.body.firstName,
                 lastName: req.body.lastName,
-                nickName: req.body.nickName? req.body.nickName : null,
+                nickName: req.body.nickName ? req.body.nickName : null,
                 email: req.body.email,
                 password: hashedPassword,
                 role: req.body.role,
@@ -39,7 +39,7 @@ export const createUser = async (
                 addressLine2: req.body.addressLine2,
                 city: req.body.city,
                 province: req.body.province,
-                postalCode: req.body.postalCode? req.body.postalCode : null
+                postalCode: req.body.postalCode ? req.body.postalCode : null
             }
         });
         res.status(201).json(user);
@@ -99,7 +99,15 @@ export const loginUser = async (
             {
                 message: "Login Successful",
                 token: token,
-                role: user.role
+                role: user.role,
+                user: {
+                    userId: user.userId,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    nickName: user.nickName,
+                    email: user.email,
+                    role: user.role,
+                },
             }
         );
 
@@ -226,7 +234,7 @@ export const updateUser = async (
         });
 
     } catch (error) {
-        console.error( "Error updating user:", error );
+        console.error("Error updating user:", error);
         return res.status(500).json({
             error: "Failed to update user"
         });
