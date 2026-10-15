@@ -102,6 +102,8 @@ model StockBatch {
 
   purchaseOrderId Int? 
   purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references:[id])
+
+  source StockBatchSource @default(PURCHASE)
   
 }
 
@@ -231,6 +233,11 @@ enum StockMovementType {
     SALE
     RETURN
     ADJUSTMENT
+}
+
+enum StockBatchSource {
+  PURCHASE
+  OPENING_STOCK
 }
 
 enum OrderStatus {
