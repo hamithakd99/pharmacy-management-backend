@@ -3,6 +3,8 @@ import { prisma } from "../../lib/prisma";
 import generateToken from "../utils/generateToken";
 import bcrypt from "bcrypt"
 import generateUserCode from "../utils/generateUserCode";
+import generateRefreshToken from "../utils/generateRefreshToken";
+import jwt from "jsonwebtoken";
 
 export const createUser = async (
     req: Request,
@@ -94,7 +96,17 @@ export const loginUser = async (
                 user.userId
             );
 
-        console.log("User logged in successfully:", user.firstName);
+        const refreshToken = generateRefreshToken(user.userId);
+
+        res.cookie("refreshToken", refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "lax",
+            path: "/user",
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+        });
+
+        // console.log("User logged in successfully:", user.firstName);
         return res.status(200).json(
             {
                 message: "Login Successful",
@@ -239,4 +251,62 @@ export const updateUser = async (
             error: "Failed to update user"
         });
     }
+};
+
+export const refreshAccessToken = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const refreshToken = req.cookies?.refreshToken;
+    const secret = process.env.JWT_REFRESH_SECRET;
+
+    if (!refreshToken || !secret) {
+      return res.status(401).json({
+        message: "Refresh token required",
+      });
+    }
+
+    const decoded = jwt.verify(refreshToken, secret, {
+      algorithms: ["HS256"],
+    });
+
+    if (
+      typeof decoded === "string" ||
+      decoded.tokenType !== "refresh" ||
+      typeof decoded.userId !== "string"
+    ) {
+      return res.status(401).json({
+        message: "Invalid refresh token",
+      });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { userId: decoded.userId },
+    });
+
+    if (!user) {
+      res.clearCookie("refreshToken", { path: "/user" });
+
+      return res.status(401).json({
+        message: "User not found",
+      });
+    }
+
+    const token = generateToken(
+      user.email,
+      user.firstName,
+      user.lastName,
+      user.role,
+      user.userId
+    );
+
+    return res.status(200).json({ token });
+  } catch {
+    res.clearCookie("refreshToken", { path: "/user" });
+
+    return res.status(401).json({
+      message: "Refresh token invalid or expired",
+    });
+  }
 };

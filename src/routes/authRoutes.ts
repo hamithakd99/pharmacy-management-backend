@@ -1,14 +1,9 @@
-import express from "express"
-import { createUser, getAllUsers, loginUser, deleteUser, updateUser, getOneUser } from "../controllers/authController"
-import adminOnly from "../middlewares/adminMiddleware";
+import express from "express";
+import { loginUser, refreshAccessToken } from "../controllers/authController";
 
-const userRouter = express.Router()
+const authRouter = express.Router();
 
-userRouter.post("/register", adminOnly, createUser);
-userRouter.post("/login", loginUser);
-userRouter.get("/", getAllUsers);
-userRouter.get("/:id", getOneUser);
-userRouter.delete("/delete/:id", adminOnly, deleteUser);
-userRouter.put("/update/:id", adminOnly, updateUser);
+authRouter.post("/login", loginUser);
+authRouter.post("/refresh", refreshAccessToken);
 
-export default userRouter;
+export default authRouter;
