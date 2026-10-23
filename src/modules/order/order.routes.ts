@@ -8,7 +8,7 @@ orderRouter.get("/", allOrders)
 orderRouter.get("/:id", getOrderById)
 orderRouter.patch("/:id/payment", updateOrderPayment)
 orderRouter.patch("/:id/status", updateOrderStatus)
-orderRouter.put("/:id/cancel", cancelOrder)
+orderRouter.patch("/:id/cancel", cancelOrder)
 
 // orderRouter.get("/customer/:id", createOrder)
 // orderRouter.get("/product/:id", createOrder)

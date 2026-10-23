@@ -4,6 +4,7 @@ import { generateBatchNumber } from "../utils/generateStockBatchCode";
 import { generateInvoiceNumber } from "../utils/generateInvoiceNumber";
 import { createGRNService } from "../services/grn/createGRN.service";
 import { createOpeningStockService } from "../services/openingStock/createOpeningStock.service";
+import { getPagination } from "../utils/pagination";
 
 // export const createNewBatch = async (
 //     req: Request,
@@ -602,34 +603,169 @@ export const createNewBatch = async (
 
 };
 
-export const getStockBatches = async (req: Request, res: Response) => {
-    try {
-        const stockBatches = await prisma.stockBatch.findMany({
-            include: {
 
-                supplier: true,
+export const getStockBatches = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const { page, limit, skip } = getPagination(req);
 
-                purchaseOrder: {
-                    select: {
-                        orderNumber: true
-                    }
+    const search = String(req.query.search ?? "").trim();
+    const paymentStatus = String(req.query.paymentStatus ?? "").trim();
+
+    const where = {
+      ...(paymentStatus
+        ? { paymentStatus: paymentStatus as any }
+        : {}),
+      ...(search
+        ? {
+            OR: [
+              {
+                batchNumber: {
+                  contains: search,
+                  mode: "insensitive" as const,
                 },
+              },
+              {
+                invoiceNumber: {
+                  contains: search,
+                  mode: "insensitive" as const,
+                },
+              },
+              {
+                supplier: {
+                  is: {
+                    firstName: {
+                      contains: search,
+                      mode: "insensitive" as const,
+                    },
+                  },
+                },
+              },
+              {
+                supplier: {
+                  is: {
+                    lastName: {
+                      contains: search,
+                      mode: "insensitive" as const,
+                    },
+                  },
+                },
+              },
+            ],
+          }
+        : {}),
+    };
 
-                items: true,
+    // Today's date boundaries (server local timezone)
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
 
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+
+    const todayWhere = {
+      receivedDate: {
+        gte: todayStart,
+        lt: tomorrowStart,
+      },
+    };
+
+    const [
+      total,
+      stockBatches,
+      totalGRNs,
+      todaysGRNs,
+      pendingPayments,
+      todaysBatches,
+    ] = await Promise.all([
+      // Filtered total for pagination
+      prisma.stockBatch.count({ where }),
+
+      // Only current page's data
+      prisma.stockBatch.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { id: "desc" },
+        include: {
+          supplier: true,
+          purchaseOrder: {
+            select: { orderNumber: true },
+          },
+          items: true,
+        },
+      }),
+
+      // Global summary counts - independent of pagination and filters
+      prisma.stockBatch.count(),
+
+      prisma.stockBatch.count({
+        where: todayWhere,
+      }),
+
+      prisma.stockBatch.count({
+        where: {
+          paymentStatus: "PENDING",
+        },
+      }),
+
+      // All batches received today, including all their items
+      prisma.stockBatch.findMany({
+        where: todayWhere,
+        select: {
+          items: {
+            select: {
+              receivedQuantity: true,
             },
-        });
-        return res.status(200).json({
-            message: "Stock batches retrieved successfully",
-            data: stockBatches
-        });
-    } catch (error) {
-        return res.status(500).json({
-            message: "Error retrieving stock batches",
-            error: error
-        });
-    }
-}
+          },
+        },
+      }),
+    ]);
+
+    const itemsReceivedToday = todaysBatches.reduce(
+      (batchTotal, batch) =>
+        batchTotal +
+        batch.items.reduce(
+          (itemTotal, item) => itemTotal + item.receivedQuantity,
+          0
+        ),
+      0
+    );
+
+    const totalPages = Math.ceil(total / limit);
+
+    return res.status(200).json({
+      message: "Stock batches retrieved successfully",
+
+      data: stockBatches,
+
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
+      },
+
+      stats: {
+        totalGRNs,
+        todaysGRNs,
+        pendingPayments,
+        itemsReceivedToday,
+      },
+    });
+  } catch (error) {
+    console.error("Error retrieving stock batches:", error);
+
+    return res.status(500).json({
+      message: "Error retrieving stock batches",
+    });
+  }
+};
+
 
 export const getStockBatchById = async (req: Request, res: Response) => {
 

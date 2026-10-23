@@ -5,6 +5,8 @@ import bcrypt from "bcrypt"
 import generateUserCode from "../utils/generateUserCode";
 import generateRefreshToken from "../utils/generateRefreshToken";
 import jwt from "jsonwebtoken";
+import { getPagination } from "../utils/pagination";
+import type { Prisma } from "../../generated/prisma/browser";
 
 export const createUser = async (
     req: Request,
@@ -133,17 +135,96 @@ export const loginUser = async (
 
 }
 
-export const getAllUsers = async (req: Request, res: Response) => {
+export const getAllUsers = async (
+    req: Request,
+    res: Response
+) => {
     try {
-        const users = await prisma.user.findMany();
-        // console.log("Fetched users successfully:", users);
-        return res.status(200).json(users);
+        const { page, limit, skip } = getPagination(req);
 
+        const search = String(req.query.search ?? "").trim();
+
+        const where: Prisma.UserWhereInput = search
+            ? {
+                  OR: [
+                      { userId: { contains: search, mode: "insensitive" } },
+                      { firstName: { contains: search, mode: "insensitive" } },
+                      { lastName: { contains: search, mode: "insensitive" } },
+                      { email: { contains: search, mode: "insensitive" } },
+                      {
+                          contactNumber: {
+                              contains: search,
+                              mode: "insensitive",
+                          },
+                      },
+                      { city: { contains: search, mode: "insensitive" } },
+                  ],
+              }
+            : {};
+
+        const [
+            users,
+            filteredTotal,
+            totalStaff,
+            admins,
+            employees,
+            cashiers,
+        ] = await Promise.all([
+            prisma.user.findMany({
+                where,
+                skip,
+                take: limit,
+                orderBy: { createdAt: "desc" },
+            }),
+
+            // Search එකට ගැළපෙන records ගණන
+            prisma.user.count({ where }),
+
+            // Summary cards: search/page එකෙන් ස්වාධීනයි
+            prisma.user.count(),
+
+            prisma.user.count({
+                where: { role: "ADMIN" },
+            }),
+
+            prisma.user.count({
+                where: { role: "EMPLOYEE" },
+            }),
+
+            prisma.user.count({
+                where: { role: "CASHIER" },
+            }),
+        ]);
+
+        const totalPages = Math.ceil(filteredTotal / limit);
+
+        return res.status(200).json({
+            data: users,
+
+            pagination: {
+                page,
+                limit,
+                total: filteredTotal,
+                totalPages,
+                hasNextPage: page < totalPages,
+                hasPreviousPage: page > 1,
+            },
+
+            summary: {
+                totalStaff,
+                admins,
+                employees,
+                cashiers,
+            },
+        });
     } catch (error) {
         console.error("Error fetching users:", error);
-        return res.status(500).json({ error: "Failed to fetch users" });
+
+        return res.status(500).json({
+            error: "Failed to fetch users",
+        });
     }
-}
+};
 
 export const deleteUser = async (
     req: Request,

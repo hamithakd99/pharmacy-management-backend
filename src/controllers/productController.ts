@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { prisma } from "../../lib/prisma"
 import generateProductCode from "../utils/generateProductCode";
+import { getPagination } from "../utils/pagination";
 
 export const createProduct = async (
     req: Request,
@@ -31,55 +32,166 @@ export const createProduct = async (
     }
 }
 
+
 export const getAllProducts = async (
-    req: Request,
-    res: Response
+  req: Request,
+  res: Response
 ) => {
-    try {
-        const allProducts = await prisma.product.findMany({
-            include: {
-                stockBatchItems: true
-            }
-        });
+  try {
+    const { page, limit, skip } = getPagination(req);
 
-        // const now = new Date();
+    const search = String(req.query.search ?? "").trim();
 
-        const products = allProducts.map((product) => {
-            const totalStock = product.stockBatchItems.reduce(
-                (total, item) => total + item.availableQuantity,
-                0
-            );
+    const where = search
+      ? {
+          OR: [
+            {
+              productId: {
+                contains: search,
+                mode: "insensitive" as const,
+              },
+            },
+            {
+              name: {
+                contains: search,
+                mode: "insensitive" as const,
+              },
+            },
+            {
+              brand: {
+                contains: search,
+                mode: "insensitive" as const,
+              },
+            },
+          ],
+        }
+      : {};
 
-            // const lastBatch = product.stockBatchItems[0];
+    const [
+      total,
+      allProducts,
+      totalProducts,
+      summaryProducts,
+    ] = await Promise.all([
+      // Search result count for pagination
+      prisma.product.count({ where }),
 
-            const currentBatch = product.stockBatchItems
-                .filter(
-                    (item) =>
-                        item.availableQuantity > 0 &&
-                        new Date(item.expiryDate) > new Date()
-                )
-                .sort(
-                    (a, b) =>
-                        new Date(a.expiryDate).getTime() -
-                        new Date(b.expiryDate).getTime()
-                )[0];
+      // Products on the current page only
+      prisma.product.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { id: "desc" },
+        include: {
+          stockBatchItems: true,
+        },
+      }),
 
-            return {
-                ...product,
-                totalStock,
-                buyingPrice: currentBatch?.buyingPrice || 0,
-                sellingPrice: currentBatch?.sellingPrice || 0
-            };
-        });
+      // Global active product count
+      prisma.product.count({
+        where: { isActive: true },
+      }),
 
-        return res.status(200).json(products);
-    } catch (error) {
-        console.error("Error fetching products:", error);
-        return res.status(500).json({
-            error: "Failed to fetch products"
-        });
+      // All active products and their batch-level stock values
+      prisma.product.findMany({
+        where: { isActive: true },
+        select: {
+          id: true,
+          reorderLevel: true,
+          stockBatchItems: {
+            select: {
+              availableQuantity: true,
+              buyingPrice: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    const now = new Date();
+
+    const products = allProducts.map((product) => {
+      const totalStock = product.stockBatchItems.reduce(
+        (sum, item) => sum + item.availableQuantity,
+        0
+      );
+
+      // Nearest-expiry batch with available, unexpired stock
+      const currentBatch = product.stockBatchItems
+        .filter(
+          (item) =>
+            item.availableQuantity > 0 &&
+            new Date(item.expiryDate) > now
+        )
+        .sort(
+          (a, b) =>
+            new Date(a.expiryDate).getTime() -
+            new Date(b.expiryDate).getTime()
+        )[0];
+
+      return {
+        ...product,
+        totalStock,
+        buyingPrice: currentBatch?.buyingPrice ?? 0,
+        sellingPrice: currentBatch?.sellingPrice ?? 0,
+      };
+    });
+
+    // Global statistics: never calculate these from allProducts,
+    // because allProducts contains only the current page.
+    let totalStock = 0;
+    let inventoryValue = 0;
+    let lowStockProducts = 0;
+
+    for (const product of summaryProducts) {
+      let productStock = 0;
+
+      for (const batch of product.stockBatchItems) {
+        const quantity = batch.availableQuantity;
+
+        productStock += quantity;
+
+        // Value each batch using its own buying price
+        inventoryValue += quantity * batch.buyingPrice;
+      }
+
+      totalStock += productStock;
+
+      if (productStock <= product.reorderLevel) {
+        lowStockProducts++;
+      }
     }
+
+    const totalPages = Math.ceil(total / limit);
+
+    return res.status(200).json({
+      data: products,
+
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
+      },
+
+      stats: {
+        totalProducts,
+        totalStock,
+        inventoryValue,
+        lowStockProducts,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching products:", error);
+
+    return res.status(500).json({
+      error: "Failed to fetch products",
+    });
+  }
 };
+
 
 export const getProductDetails = async (
     req: Request,

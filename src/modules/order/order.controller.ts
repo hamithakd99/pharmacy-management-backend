@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { prisma } from "../../../lib/prisma";
 import { generateOrderNumber } from "../../utils/generateOrderNumber";
+import { getPagination } from "../../utils/pagination";
 
 
 // =====================================================
@@ -626,66 +627,224 @@ export const createOrder = async (
     }
 };
 
+
 export const allOrders = async (
-    req: Request,
-    res: Response
+  req: Request,
+  res: Response
 ) => {
+  try {
+    const { page, limit, skip } = getPagination(req);
 
-    try {
+    const search = String(req.query.search ?? "").trim();
+    const status = String(req.query.status ?? "").trim();
 
-        const orders =
-            await prisma.order.findMany({
+    const validStatuses = [
+      "PENDING",
+      "CONFIRMED",
+      "COMPLETED",
+      "CANCELLED",
+    ] as const;
 
-                orderBy: {
-                    createdAt: "desc"
-                },
-
-                include: {
-
-                    customer: {
-                        select: {
-                            id: true,
-                            userId: true,
-                            firstName: true,
-                            lastName: true
-                        }
-                    },
-
-                    cashier: {
-                        select: {
-                            userId: true,
-                            firstName: true,
-                            lastName: true
-                        }
-                    },
-
-                    items: {
-                        include: {
-                            product: true
-                        }
-                    }
-                }
-            });
-
-        return res.status(200).json({
-            success: true,
-            data: orders
-
-        });
-
-    } catch (error) {
-
-        console.error(
-            "Get all orders error:",
-            error
-        );
-
-        return res.status(500).json({
-            success: false,
-            message: "Failed to get orders"
-        });
+    if (
+      status &&
+      !validStatuses.includes(status as (typeof validStatuses)[number])
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order status",
+      });
     }
+
+    const where = {
+      ...(status
+        ? {
+            status: status as
+              | "PENDING"
+              | "CONFIRMED"
+              | "COMPLETED"
+              | "CANCELLED",
+          }
+        : {}),
+
+      ...(search
+        ? {
+            OR: [
+              {
+                orderNumber: {
+                  contains: search,
+                  mode: "insensitive" as const,
+                },
+              },
+              {
+                customer: {
+                  is: {
+                    firstName: {
+                      contains: search,
+                      mode: "insensitive" as const,
+                    },
+                  },
+                },
+              },
+              {
+                customer: {
+                  is: {
+                    lastName: {
+                      contains: search,
+                      mode: "insensitive" as const,
+                    },
+                  },
+                },
+              },
+              {
+                customer: {
+                  is: {
+                    email: {
+                      contains: search,
+                      mode: "insensitive" as const,
+                    },
+                  },
+                },
+              },
+              {
+                customer: {
+                  is: {
+                    contactNumber: {
+                      contains: search,
+                      mode: "insensitive" as const,
+                    },
+                  },
+                },
+              },
+              {
+                items: {
+                  some: {
+                    product: {
+                      name: {
+                        contains: search,
+                        mode: "insensitive" as const,
+                      },
+                    },
+                  },
+                },
+              },
+            ],
+          }
+        : {}),
+    };
+
+    const [
+      total,
+      orders,
+      totalOrders,
+      pendingOrders,
+      confirmedOrders,
+      completedOrders,
+      cancelledOrders,
+      salesResult,
+    ] = await Promise.all([
+      // Current search/filter result count for pagination
+      prisma.order.count({ where }),
+
+      // Current page only
+      prisma.order.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: {
+          createdAt: "desc",
+        },
+        include: {
+          customer: {
+            select: {
+              id: true,
+              userId: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              contactNumber: true,
+            },
+          },
+          cashier: {
+            select: {
+              userId: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+          items: {
+            include: {
+              product: true,
+            },
+          },
+        },
+      }),
+
+      // Global summary counts — no pagination or search/status filter
+      prisma.order.count(),
+
+      prisma.order.count({
+        where: { status: "PENDING" },
+      }),
+
+      prisma.order.count({
+        where: { status: "CONFIRMED" },
+      }),
+
+      prisma.order.count({
+        where: { status: "COMPLETED" },
+      }),
+
+      prisma.order.count({
+        where: { status: "CANCELLED" },
+      }),
+
+      // Global sales total using the existing card's business rule
+      prisma.order.aggregate({
+        where: {
+          status: {
+            in: ["CONFIRMED", "COMPLETED"],
+          },
+        },
+        _sum: {
+          totalAmount: true,
+        },
+      }),
+    ]);
+
+    const totalPages = Math.ceil(total / limit);
+
+    return res.status(200).json({
+      success: true,
+      data: orders,
+
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
+      },
+
+      stats: {
+        totalOrders,
+        pendingOrders,
+        confirmedOrders,
+        completedOrders,
+        cancelledOrders,
+        totalSales: Number(salesResult._sum.totalAmount ?? 0),
+      },
+    });
+  } catch (error) {
+    console.error("Get all orders error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to get orders",
+    });
+  }
 };
+
 
 export const getOrderById = async (
     req: Request,
@@ -890,390 +1049,211 @@ export const cancelOrder = async (
     try {
         const orderId = Number(req.params.id);
 
-        // =================================================
-        // Validate Order ID
-        // =================================================
-
-        if (
-            !Number.isInteger(orderId) ||
-            orderId <= 0
-        ) {
+        // 1. Validate Order ID
+        if (!Number.isInteger(orderId) || orderId <= 0) {
             return res.status(400).json({
                 success: false,
-                message: "Invalid order ID"
+                message: "Invalid order ID",
             });
         }
 
-        // =================================================
-        // Transaction
-        // =================================================
+        // 2. Cancel Order Transaction
+        const result = await prisma.$transaction(async (tx) => {
+            const order = await tx.order.findUnique({
+                where: { id: orderId },
+                include: {
+                    items: true,
+                },
+            });
 
-        const result = await prisma.$transaction(
-            async (tx) => {
+            if (!order) {
+                throw new Error("ORDER_NOT_FOUND");
+            }
 
-                // -----------------------------------------
-                // Find Order
-                // -----------------------------------------
+            // Only PENDING and CONFIRMED orders can be cancelled
+            if (order.status === "CANCELLED") {
+                throw new Error("ORDER_ALREADY_CANCELLED");
+            }
 
-                const order =
-                    await tx.order.findUnique({
-                        where: {
-                            id: orderId
-                        },
-
-                        include: {
-                            items: true
-                        }
-                    });
-
-                if (!order) {
-                    throw new Error(
-                        "ORDER_NOT_FOUND"
-                    );
-                }
-
-                // -----------------------------------------
-                // Already Cancelled
-                // -----------------------------------------
-
-                if (
-                    order.status ===
-                    "CANCELLED"
-                ) {
-                    throw new Error(
-                        "ORDER_ALREADY_CANCELLED"
-                    );
-                }
-
-                // -----------------------------------------
-                // Completed Orders Cannot Be Cancelled
-                // -----------------------------------------
-
-                if (
-                    order.status ===
-                    "COMPLETED"
-                ) {
-                    throw new Error(
-                        "COMPLETED_ORDER_CANNOT_BE_CANCELLED"
-                    );
-                }
-
-                // -----------------------------------------
-                // Make Sure Order Has Items
-                // -----------------------------------------
-
-                if (
-                    order.items.length === 0
-                ) {
-                    throw new Error(
-                        "ORDER_HAS_NO_ITEMS"
-                    );
-                }
-
-                // =================================================
-                // CASE 1
-                // PENDING → CANCELLED
-                //
-                // No stock was deducted.
-                // Therefore:
-                //
-                // NO stock restore
-                // NO RETURN movement
-                // =================================================
-
-                if (
-                    order.status ===
-                    "PENDING"
-                ) {
-
-                    const updatedOrder =
-                        await tx.order.update({
-                            where: {
-                                id: order.id
-                            },
-
-                            data: {
-                                status:
-                                    "CANCELLED"
-                            },
-
-                            include: {
-                                customer: true,
-
-                                cashier: {
-                                    select: {
-                                        userId: true,
-                                        firstName: true,
-                                        lastName: true
-                                    }
-                                },
-
-                                items: {
-                                    include: {
-                                        product: true,
-
-                                        stockBatchItem: {
-                                            include: {
-                                                stockBatch: true
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        });
-
-                    return updatedOrder;
-                }
-
-                // =================================================
-                // CASE 2
-                // CONFIRMED → CANCELLED
-                //
-                // Stock was already deducted.
-                //
-                // Therefore:
-                //
-                // Restore stock
-                // Create RETURN movement
-                // =================================================
-
-                if (
-                    order.status ===
-                    "CONFIRMED"
-                ) {
-
-                    for (
-                        const item of order.items
-                    ) {
-
-                        // -----------------------------------------
-                        // Confirmed order items MUST have
-                        // a stock batch allocation.
-                        // -----------------------------------------
-
-                        if (
-                            !item.stockBatchItemId
-                        ) {
-                            throw new Error(
-                                `STOCK_ALLOCATION_MISSING:${item.id}`
-                            );
-                        }
-
-                        // -----------------------------------------
-                        // Restore Stock
-                        // -----------------------------------------
-
-                        const updatedStock =
-                            await tx.stockBatchItem.updateMany({
-                                where: {
-                                    id:
-                                        item.stockBatchItemId
-                                },
-
-                                data: {
-                                    availableQuantity: {
-                                        increment:
-                                            item.quantity
-                                    }
-                                }
-                            });
-
-                        if (
-                            updatedStock.count !== 1
-                        ) {
-                            throw new Error(
-                                `STOCK_BATCH_ITEM_NOT_FOUND:${item.stockBatchItemId}`
-                            );
-                        }
-
-                        // -----------------------------------------
-                        // Create RETURN Movement
-                        // -----------------------------------------
-
-                        await tx.stockMovement.create({
-                            data: {
-                                stockBatchItemId:
-                                    item.stockBatchItemId,
-
-                                productId:
-                                    item.productId,
-
-                                type:
-                                    "RETURN",
-
-                                quantity:
-                                    item.quantity,
-
-                                orderId:
-                                    order.id,
-
-                                orderItemId:
-                                    item.id,
-
-                                note:
-                                    `Stock restored because order ${order.orderNumber} was cancelled`
-                            }
-                        });
-                    }
-
-                    // -----------------------------------------
-                    // Update Order Status
-                    // -----------------------------------------
-
-                    const updatedOrder =
-                        await tx.order.update({
-                            where: {
-                                id: order.id
-                            },
-
-                            data: {
-                                status:
-                                    "CANCELLED"
-                            },
-
-                            include: {
-                                customer: true,
-
-                                cashier: {
-                                    select: {
-                                        userId: true,
-                                        firstName: true,
-                                        lastName: true
-                                    }
-                                },
-
-                                items: {
-                                    include: {
-                                        product: true,
-
-                                        stockBatchItem: {
-                                            include: {
-                                                stockBatch: true
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        });
-
-                    return updatedOrder;
-                }
-
-                // -----------------------------------------
-                // Unexpected Status
-                // -----------------------------------------
-
+            if (order.status === "COMPLETED") {
                 throw new Error(
-                    "INVALID_ORDER_STATUS_FOR_CANCELLATION"
+                    "COMPLETED_ORDER_CANNOT_BE_CANCELLED"
                 );
             }
-        );
 
-        // =================================================
-        // Response
-        // =================================================
+            if (
+                order.status !== "PENDING" &&
+                order.status !== "CONFIRMED"
+            ) {
+                throw new Error("INVALID_ORDER_STATUS");
+            }
 
+            if (order.items.length === 0) {
+                throw new Error("ORDER_HAS_NO_ITEMS");
+            }
+
+            // 3. Restore Stock Only for CONFIRMED Orders
+            if (order.status === "CONFIRMED") {
+                for (const item of order.items) {
+                    if (!item.stockBatchItemId) {
+                        throw new Error(
+                            `STOCK_ALLOCATION_MISSING:${item.id}`
+                        );
+                    }
+
+                    const stockBatchItemId =
+                        item.stockBatchItemId;
+
+                    const updatedStock =
+                        await tx.stockBatchItem.updateMany({
+                            where: {
+                                id: stockBatchItemId,
+                            },
+                            data: {
+                                availableQuantity: {
+                                    increment: item.quantity,
+                                },
+                            },
+                        });
+
+                    if (updatedStock.count !== 1) {
+                        throw new Error(
+                            `STOCK_BATCH_ITEM_NOT_FOUND:${stockBatchItemId}`
+                        );
+                    }
+
+                    // Record stock return movement
+                    await tx.stockMovement.create({
+                        data: {
+                            stockBatchItemId,
+                            productId: item.productId,
+                            type: "RETURN",
+                            quantity: item.quantity,
+                            orderId: order.id,
+                            orderItemId: item.id,
+                            note: `Stock restored because order ${order.orderNumber} was cancelled`,
+                        },
+                    });
+                }
+            }
+
+            // 4. Update Status Safely
+            // Conditional update helps prevent duplicate cancellation
+            // from restoring stock more than once.
+            const updatedStatus = await tx.order.updateMany({
+                where: {
+                    id: order.id,
+                    status: order.status,
+                },
+                data: {
+                    status: "CANCELLED",
+                },
+            });
+
+            if (updatedStatus.count !== 1) {
+                throw new Error("ORDER_STATUS_CHANGED");
+            }
+
+            // 5. Return Updated Order
+            return await tx.order.findUniqueOrThrow({
+                where: {
+                    id: order.id,
+                },
+                include: {
+                    customer: true,
+                    cashier: {
+                        select: {
+                            userId: true,
+                            firstName: true,
+                            lastName: true,
+                        },
+                    },
+                    items: {
+                        include: {
+                            product: true,
+                            stockBatchItem: {
+                                include: {
+                                    stockBatch: true,
+                                },
+                            },
+                        },
+                    },
+                },
+            });
+        });
+
+        // 6. Success Response
         return res.status(200).json({
             success: true,
-            message:
-                "Order cancelled successfully",
-            data: result
+            message: "Order cancelled successfully",
+            data: result,
         });
+    } catch (error: unknown) {
+        const message =
+            error instanceof Error ? error.message : "";
 
-    } catch (error: any) {
+        console.error("Cancel Order Error:", error);
 
-        console.error(
-            "Cancel Order Error:",
-            error
-        );
+        // 7. Error Responses
+        switch (true) {
+            case message === "ORDER_NOT_FOUND":
+                return res.status(404).json({
+                    success: false,
+                    message: "Order not found",
+                });
 
-        // =================================================
-        // Error Handling
-        // =================================================
+            case message === "ORDER_ALREADY_CANCELLED":
+                return res.status(400).json({
+                    success: false,
+                    message: "Order is already cancelled",
+                });
 
-        if (
-            error.message ===
-            "ORDER_NOT_FOUND"
-        ) {
-            return res.status(404).json({
-                success: false,
-                message: "Order not found"
-            });
+            case message ===
+                "COMPLETED_ORDER_CANNOT_BE_CANCELLED":
+                return res.status(400).json({
+                    success: false,
+                    message: "Completed orders cannot be cancelled",
+                });
+
+            case message === "ORDER_HAS_NO_ITEMS":
+                return res.status(400).json({
+                    success: false,
+                    message: "Cannot cancel an order without items",
+                });
+
+            case message === "INVALID_ORDER_STATUS":
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "This order cannot be cancelled from its current status",
+                });
+
+            case message === "ORDER_STATUS_CHANGED":
+                return res.status(409).json({
+                    success: false,
+                    message:
+                        "Order status changed. Please refresh and try again.",
+                });
+
+            case message.startsWith("STOCK_ALLOCATION_MISSING"):
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Stock allocation is missing for a confirmed order item",
+                });
+
+            case message.startsWith("STOCK_BATCH_ITEM_NOT_FOUND"):
+                return res.status(404).json({
+                    success: false,
+                    message: "Stock batch item not found",
+                });
+
+            default:
+                return res.status(500).json({
+                    success: false,
+                    message: "Failed to cancel order",
+                });
         }
-
-        if (
-            error.message ===
-            "ORDER_ALREADY_CANCELLED"
-        ) {
-            return res.status(400).json({
-                success: false,
-                message:
-                    "Order is already cancelled"
-            });
-        }
-
-        if (
-            error.message ===
-            "COMPLETED_ORDER_CANNOT_BE_CANCELLED"
-        ) {
-            return res.status(400).json({
-                success: false,
-                message:
-                    "Completed orders cannot be cancelled"
-            });
-        }
-
-        if (
-            error.message ===
-            "ORDER_HAS_NO_ITEMS"
-        ) {
-            return res.status(400).json({
-                success: false,
-                message:
-                    "Cannot cancel an order without items"
-            });
-        }
-
-        if (
-            error.message?.startsWith(
-                "STOCK_ALLOCATION_MISSING"
-            )
-        ) {
-            return res.status(400).json({
-                success: false,
-                message:
-                    "Stock allocation is missing for a confirmed order item"
-            });
-        }
-
-        if (
-            error.message?.startsWith(
-                "STOCK_BATCH_ITEM_NOT_FOUND"
-            )
-        ) {
-            return res.status(404).json({
-                success: false,
-                message:
-                    "Stock batch item not found"
-            });
-        }
-
-        if (
-            error.message ===
-            "INVALID_ORDER_STATUS_FOR_CANCELLATION"
-        ) {
-            return res.status(400).json({
-                success: false,
-                message:
-                    "This order cannot be cancelled from its current status"
-            });
-        }
-
-        return res.status(500).json({
-            success: false,
-            message:
-                "Failed to cancel order"
-        });
     }
 };
 

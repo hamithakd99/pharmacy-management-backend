@@ -1,6 +1,8 @@
 import type { Request, Response } from "express";
 import { prisma } from "../../lib/prisma";
 import generateExUserCode from "../utils/generateExternalUserCode";
+import { getPagination } from "../utils/pagination";
+import type { Prisma } from "../../generated/prisma/client";
 
 export const createUser = async (req: Request, res: Response) => {
 
@@ -32,14 +34,22 @@ export const createUser = async (req: Request, res: Response) => {
 export const getCustomers = async (
     req: Request,
     res: Response
-    ) => {
-    const customers = await prisma.externalUser.findMany({
-        where: {
-        role: "CUSTOMER"
-        }
-    });
+) => {
+    try {
+        const customers = await prisma.externalUser.findMany({
+            where: {
+                role: "CUSTOMER",
+            },
+        });
 
-    return res.status(200).json(customers);
+        return res.status(200).json(customers);
+    } catch (error) {
+        console.error("Failed to get customers:", error);
+
+        return res.status(500).json({
+            message: "Failed to retrieve customers",
+        });
+    }
 };
 
 export const getSuppliers = async (
@@ -79,16 +89,88 @@ export const getoneExternalUser = async (
 };
 
 export const getAllExternalUsers = async (
-    req : Request,
-    res : Response
+    req: Request,
+    res: Response
 ) => {
     try {
-        const allExternalUsers = await prisma.externalUser.findMany();
-        return res.status(200).json(allExternalUsers);
+        const { page, limit, skip } = getPagination(req);
+
+        const search = String(req.query.search ?? "").trim();
+
+        const where: Prisma.ExternalUserWhereInput = search
+            ? {
+                  OR: [
+                      { userId: { contains: search, mode: "insensitive" } },
+                      { firstName: { contains: search, mode: "insensitive" } },
+                      { lastName: { contains: search, mode: "insensitive" } },
+                      { email: { contains: search, mode: "insensitive" } },
+                      {
+                          contactNumber: {
+                              contains: search,
+                              mode: "insensitive",
+                          },
+                      },
+                      { city: { contains: search, mode: "insensitive" } },
+                  ],
+              }
+            : {};
+
+        const [
+            externalUsers,
+            filteredTotal,
+            totalExternal,
+            suppliers,
+            customers,
+        ] = await Promise.all([
+            prisma.externalUser.findMany({
+                where,
+                skip,
+                take: limit,
+                orderBy: { id: "desc" },
+            }),
+
+            prisma.externalUser.count({ where }),
+
+            // Summary cards: සියලු external users
+            prisma.externalUser.count(),
+
+            prisma.externalUser.count({
+                where: { role: "SUPPLIER" },
+            }),
+
+            prisma.externalUser.count({
+                where: { role: "CUSTOMER" },
+            }),
+        ]);
+
+        const totalPages = Math.ceil(filteredTotal / limit);
+
+        return res.status(200).json({
+            data: externalUsers,
+
+            pagination: {
+                page,
+                limit,
+                total: filteredTotal,
+                totalPages,
+                hasNextPage: page < totalPages,
+                hasPreviousPage: page > 1,
+            },
+
+            summary: {
+                totalExternal,
+                suppliers,
+                customers,
+            },
+        });
     } catch (error) {
-        return res.status(500).json({ error: "Failed to fetch external users" });
+        console.error("Error fetching external users:", error);
+
+        return res.status(500).json({
+            error: "Failed to fetch external users",
+        });
     }
-}
+};
 
 export const updateExternalUser = async (
     req: Request,

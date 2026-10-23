@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { prisma } from "../../lib/prisma";
 import { generatePOcode } from "../utils/generatePuchaseOrderCode";
 import { getPurchaseOrderDetails } from "../services/purchaseOrder/getPurchaseOrderDetails.service";
+import { getPagination } from "../utils/pagination";
 
 export const createPurchaseOrder = async (
     req: Request,
@@ -109,271 +110,136 @@ export const createPurchaseOrder = async (
     }
 }
 
+
+
 export const getPurchaseOrders = async (
     req: Request,
     res: Response
 ) => {
-
     try {
+        const { page, limit, skip } = getPagination(req);
+        const search = String(req.query.search ?? "").trim();
 
-        const purchaseOrders =
-            await prisma.purchaseOrder.findMany({
-
-                include: {
-
-                    supplier: true,
-
-                    items: {
-
-                        include: {
-
-                            product: true,
-
+        const where = search
+            ? {
+                OR: [
+                    {
+                        orderNumber: {
+                            contains: search,
+                            mode: "insensitive" as const,
                         },
-
                     },
+                    {
+                        supplier: {
+                            is: {
+                                firstName: {
+                                    contains: search,
+                                    mode: "insensitive" as const,
+                                },
+                            },
+                        },
+                    },
+                    {
+                        supplier: {
+                            is: {
+                                lastName: {
+                                    contains: search,
+                                    mode: "insensitive" as const,
+                                },
+                            },
+                        },
+                    },
+                ],
+            }
+            : {};
 
+        const [
+            total,
+            purchaseOrders,
+            totalOrders,
+            pendingOrders,
+            partiallyReceivedOrders,
+            completedOrders,
+            cancelledOrders,
+        ] = await Promise.all([
+            // Search-filtered count for pagination
+            prisma.purchaseOrder.count({ where }),
+
+            // Current page only
+            prisma.purchaseOrder.findMany({
+                where,
+                skip,
+                take: limit,
+                include: {
+                    supplier: true,
+                    items: {
+                        include: {
+                            product: true,
+                        },
+                    },
                 },
-
                 orderBy: {
-
                     createdAt: "desc",
-
                 },
+            }),
 
-            });
+            // Global statistics, independent of search/page
+            prisma.purchaseOrder.count(),
 
-        return res.status(200).json(
+            prisma.purchaseOrder.count({
+                where: { status: "PENDING" },
+            }),
 
-            purchaseOrders
+            prisma.purchaseOrder.count({
+                where: { status: "PARTIALLY_RECEIVED" },
+            }),
 
-        );
+            prisma.purchaseOrder.count({
+                where: { status: "COMPLETED" },
+            }),
 
-    }
+            prisma.purchaseOrder.count({
+                where: { status: "CANCELLED" },
+            }),
+        ]);
 
-    catch (error) {
+        const totalPages = Math.ceil(total / limit);
 
-        console.error(
-            "Get Purchase Orders Error:",
-            error
-        );
+        return res.status(200).json({
+            data: purchaseOrders,
+
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages,
+                hasNextPage: page < totalPages,
+                hasPreviousPage: page > 1,
+            },
+
+            stats: {
+                totalOrders,
+                pendingOrders,
+                partiallyReceivedOrders,
+                completedOrders,
+                cancelledOrders,
+            },
+        });
+    } catch (error) {
+        console.error("Get Purchase Orders Error:", error);
 
         return res.status(500).json({
-
-            error:
-                "Failed to fetch purchase orders",
-
+            error: "Failed to fetch purchase orders",
         });
-
     }
-}
+};
 
 
-// export const getPurchaseOrderById = async (
-//     req: Request<Params>,
-//     res: Response
-// ) => {
-
-//     const { id } = req.params;
-
-//     const purchaseOrderId = Number(id);
-
-//     if (Number.isNaN(purchaseOrderId)) {
-
-//         return res.status(400).json({
-//             error: "Invalid purchase order ID",
-//         });
-
-//     }
-
-//     try {
-
-//         // =====================================================
-//         // 1. Get Purchase Order
-//         // =====================================================
-
-//         const purchaseOrder =
-//             await prisma.purchaseOrder.findUnique({
-
-//                 where: {
-//                     id: purchaseOrderId,
-//                 },
-
-//                 include: {
-
-//                     supplier: true,
-
-//                     items: {
-//                         include: {
-//                             product: true,
-//                         },
-//                     },
-
-//                 },
-
-//             });
-
-
-//         if (!purchaseOrder) {
-
-//             return res.status(404).json({
-//                 error: "Purchase order not found",
-//             });
-
-//         }
-
-
-//         // =====================================================
-//         // 2. Get ALL GRN items belonging to this PO
-//         // =====================================================
-
-//         const grnItems =
-//             await prisma.stockBatchItem.findMany({
-
-//                 where: {
-
-//                     stockBatch: {
-//                         purchaseOrderId:
-//                             purchaseOrderId,
-//                     },
-
-//                 },
-
-//                 select: {
-
-//                     productId: true,
-
-//                     receivedQuantity: true,
-
-//                 },
-
-//             });
-
-
-//         // =====================================================
-//         // 3. Calculate received + remaining
-//         // =====================================================
-
-//         const items =
-//             purchaseOrder.items.map((item) => {
-
-
-//                 // Find all GRN quantities for
-//                 // this product under this PO
-
-//                 const alreadyReceived =
-//                     grnItems
-//                         .filter(
-//                             (grnItem) =>
-//                                 grnItem.productId ===
-//                                 item.productId
-//                         )
-//                         .reduce(
-//                             (
-//                                 total,
-//                                 grnItem
-//                             ) =>
-//                                 total +
-//                                 grnItem.receivedQuantity,
-//                             0
-//                         );
-
-
-//                 // Original PO quantity
-
-//                 const orderedQuantity =
-//                     item.quantity;
-
-
-//                 // Remaining quantity
-
-//                 const remainingQuantity =
-//                     Math.max(
-//                         orderedQuantity -
-//                         alreadyReceived,
-//                         0
-//                     );
-
-
-//                 return {
-
-//                     id:
-//                         item.id,
-
-//                     productId:
-//                         item.productId,
-
-//                     quantity:
-//                         orderedQuantity,
-
-//                     alreadyReceived:
-//                         alreadyReceived,
-
-//                     remainingQuantity:
-//                         remainingQuantity,
-
-//                     product:
-//                         item.product,
-
-//                 };
-
-//             });
-
-
-//         // =====================================================
-//         // 4. Return PO
-//         // =====================================================
-
-//         return res.status(200).json({
-
-//             id:
-//                 purchaseOrder.id,
-
-//             orderNumber:
-//                 purchaseOrder.orderNumber,
-
-//             supplierId:
-//                 purchaseOrder.supplierId,
-
-//             supplier:
-//                 purchaseOrder.supplier,
-
-//             status:
-//                 purchaseOrder.status,
-
-//             createdAt:
-//                 purchaseOrder.createdAt,
-
-//             items:
-//                 items,
-
-//         });
-
-//     } catch (error) {
-
-//         console.error(
-//             "Get Purchase Order Error:",
-//             error
-//         );
-
-//         return res.status(500).json({
-
-//             error:
-//                 "Failed to fetch purchase order",
-
-//         });
-
-//     }
-// };
-
-interface Params {
-    id: string;
-}
 
 
 export const getPurchaseOrderById =
     async (
-        req: Request<Params>,
+        req: Request<{ id: string }>,
         res: Response
     ) => {
 
@@ -447,254 +313,6 @@ export const getPurchaseOrderById =
 
     };
 
-// export const updatePurchaseOrder = async (
-//     req: Request<Params>,
-//     res: Response
-// ) => {
-
-//     const { id } = req.params;
-
-//     const purchaseOrderId =
-//         Number(id);
-
-//     const {
-//         supplierId,
-//         status,
-//         items
-//     } = req.body;
-
-//     if (Number.isNaN(purchaseOrderId)) {
-
-//         return res.status(400).json({
-
-//             error:
-//                 "Invalid purchase order ID",
-
-//         });
-
-//     }
-
-//     try {
-
-//         /*
-//         ---------------------------------------------
-//         CHECK PURCHASE ORDER
-//         ---------------------------------------------
-//         */
-
-//         const existingPurchaseOrder =
-//             await prisma.purchaseOrder.findUnique({
-
-//                 where: {
-
-//                     id: purchaseOrderId,
-
-//                 },
-
-//                 include: {
-
-//                     stockBatch: true,
-
-//                 },
-
-//             });
-
-//         if (!existingPurchaseOrder) {
-
-//             return res.status(404).json({
-
-//                 error:
-//                     "Purchase order not found",
-
-//             });
-
-//         }
-
-
-//         /*
-//         ---------------------------------------------
-//         ONLY PENDING PO CAN BE EDITED
-//         ---------------------------------------------
-//         */
-
-//         if (
-//             existingPurchaseOrder.status !==
-//             "PENDING"
-//         ) {
-
-//             return res.status(400).json({
-
-//                 error:
-//                     "Only pending purchase orders can be edited.",
-
-//             });
-
-//         }
-
-
-//         /*
-//         ---------------------------------------------
-//         PO ALREADY USED IN GRN
-//         ---------------------------------------------
-//         */
-
-//         if (
-//             existingPurchaseOrder.stockBatch
-//         ) {
-
-//             return res.status(400).json({
-
-//                 error:
-//                     "This purchase order is already linked to a GRN and cannot be edited.",
-
-//             });
-
-//         }
-
-
-//         /*
-//         ---------------------------------------------
-//         VALIDATE ITEMS
-//         ---------------------------------------------
-//         */
-
-//         if (
-//             !Array.isArray(items) ||
-//             items.length === 0
-//         ) {
-
-//             return res.status(400).json({
-
-//                 error:
-//                     "At least one product is required",
-
-//             });
-
-//         }
-
-
-//         /*
-//         ---------------------------------------------
-//         UPDATE
-//         ---------------------------------------------
-//         */
-
-//         const updatedPurchaseOrder =
-//             await prisma.$transaction(
-
-//                 async (tx) => {
-
-//                     /*
-//                     Delete old items
-//                     */
-
-//                     await tx.purchaseOrderItem.deleteMany({
-
-//                         where: {
-
-//                             purchaseOrderId:
-//                                 purchaseOrderId,
-
-//                         },
-
-//                     });
-
-
-//                     /*
-//                     Update PO + create new items
-//                     */
-
-//                     return await tx.purchaseOrder.update({
-
-//                         where: {
-
-//                             id:
-//                                 purchaseOrderId,
-
-//                         },
-
-//                         data: {
-
-//                             supplierId:
-//                                 Number(supplierId),
-
-//                             status:
-//                                 status ?? "PENDING",
-
-//                             items: {
-
-//                                 create:
-//                                     items.map(
-//                                         (item: any) => ({
-
-//                                             productId:
-//                                                 Number(
-//                                                     item.productId
-//                                                 ),
-
-//                                             quantity:
-//                                                 Number(
-//                                                     item.quantity
-//                                                 ),
-
-//                                         })
-//                                     ),
-
-//                             },
-
-//                         },
-
-//                         include: {
-
-//                             supplier: true,
-
-//                             items: {
-
-//                                 include: {
-
-//                                     product: true,
-
-//                                 },
-
-//                             },
-
-//                         },
-
-//                     });
-
-//                 }
-
-//             );
-
-//         return res.status(200).json({
-
-//             message:
-//                 "Purchase order updated successfully",
-
-//             data:
-//                 updatedPurchaseOrder,
-
-//         });
-
-//     }
-
-//     catch (error) {
-
-//         console.error(
-//             "Update Purchase Order Error:",
-//             error
-//         );
-
-//         return res.status(500).json({
-
-//             error:
-//                 "Failed to update purchase order",
-
-//         });
-
-//     }
-
-// };
 
 export const updatePurchaseOrder = async (
     req: Request,
@@ -722,14 +340,7 @@ export const updatePurchaseOrder = async (
 
 
     try {
-
-        /*
-        ============================================
-        FIND EXISTING PO
-        ============================================
-        */
-
-        const existingPurchaseOrder =
+const existingPurchaseOrder =
             await prisma.purchaseOrder.findUnique({
 
                 where: {
@@ -922,342 +533,80 @@ export const updatePurchaseOrder = async (
 
 };
 
-// export const deletePurchaseOrder = async (
-//     req: Request<Params>,
-//     res: Response
-// ) => {
 
-//     const { id } = req.params;
-
-//     const purchaseOrderId =
-//         Number(id);
-
-//     if (Number.isNaN(purchaseOrderId)) {
-
-//         return res.status(400).json({
-
-//             error:
-//                 "Invalid purchase order ID",
-
-//         });
-
-//     }
-
-//     try {
-
-//         /*
-//         ---------------------------------------------
-//         CHECK PURCHASE ORDER
-//         ---------------------------------------------
-//         */
-
-//         const existingPurchaseOrder =
-//             await prisma.purchaseOrder.findUnique({
-
-//                 where: {
-
-//                     id:
-//                         purchaseOrderId,
-
-//                 },
-
-//                 include: {
-
-//                     stockBatch: true,
-
-//                 },
-
-//             });
-
-//         if (!existingPurchaseOrder) {
-
-//             return res.status(404).json({
-
-//                 error:
-//                     "Purchase order not found",
-
-//             });
-
-//         }
-
-
-//         /*
-//         ---------------------------------------------
-//         ONLY PENDING PO CAN BE DELETED
-//         ---------------------------------------------
-//         */
-
-//         if (
-//             existingPurchaseOrder.status !==
-//             "PENDING"
-//         ) {
-
-//             return res.status(400).json({
-
-//                 error:
-//                     "Only pending purchase orders can be deleted.",
-
-//             });
-
-//         }
-
-
-//         /*
-//         ---------------------------------------------
-//         CHECK GRN
-//         ---------------------------------------------
-//         */
-
-//         if (
-//             existingPurchaseOrder.stockBatch
-//         ) {
-
-//             return res.status(400).json({
-
-//                 error:
-//                     "This purchase order is already linked to a GRN and cannot be deleted.",
-
-//             });
-
-//         }
-
-
-//         /*
-//         ---------------------------------------------
-//         DELETE
-//         ---------------------------------------------
-//         */
-
-//         await prisma.$transaction(
-
-//             async (tx) => {
-
-//                 await tx.purchaseOrderItem.deleteMany({
-
-//                     where: {
-
-//                         purchaseOrderId:
-//                             purchaseOrderId,
-
-//                     },
-
-//                 });
-
-//                 await tx.purchaseOrder.delete({
-
-//                     where: {
-
-//                         id:
-//                             purchaseOrderId,
-
-//                     },
-
-//                 });
-
-//             }
-
-//         );
-
-//         return res.status(200).json({
-
-//             message:
-//                 "Purchase order deleted successfully",
-
-//         });
-
-//     }
-
-//     catch (error) {
-
-//         console.error(
-//             "Delete Purchase Order Error:",
-//             error
-//         );
-
-//         return res.status(500).json({
-
-//             error:
-//                 "Failed to delete purchase order",
-
-//         });
-
-//     }
-
-// };
-
-export const deletePurchaseOrder = async (
+export const cancelPurchaseOrder = async (
     req: Request,
     res: Response
 ) => {
+    const purchaseOrderId = Number(req.params.id);
 
-    const { id } = req.params;
-
-    const purchaseOrderId = Number(id);
-
-
-    if (!Number.isInteger(purchaseOrderId)) {
-
+    if (!Number.isInteger(purchaseOrderId) || purchaseOrderId <= 0) {
         return res.status(400).json({
-            error: "Invalid purchase order ID"
+            error: "Invalid purchase order ID",
         });
-
     }
-
 
     try {
-
-        /*
-        ============================================
-        FIND PURCHASE ORDER
-        ============================================
-        */
-
         const existingPurchaseOrder =
             await prisma.purchaseOrder.findUnique({
-
-                where: {
-                    id: purchaseOrderId
-                },
-
+                where: { id: purchaseOrderId },
                 include: {
-
-                    stockBatch: true
-
-                }
-
+                    stockBatch: true,
+                },
             });
-
-
-        /*
-        ============================================
-        CHECK PO EXISTS
-        ============================================
-        */
 
         if (!existingPurchaseOrder) {
-
             return res.status(404).json({
-
-                error:
-                    "Purchase order not found"
-
+                error: "Purchase order not found",
             });
-
         }
 
-
-        /*
-        ============================================
-        ONLY PENDING PO CAN BE DELETED
-        ============================================
-        */
-
-        if (
-            existingPurchaseOrder.status !==
-            "PENDING"
-        ) {
-
+        if (existingPurchaseOrder.status === "CANCELLED") {
             return res.status(400).json({
-
-                error:
-                    "Only pending purchase orders can be deleted."
-
+                error: "This purchase order is already cancelled.",
             });
-
         }
 
-
-        /*
-        ============================================
-        CHECK GRN LINK
-        ============================================
-        */
-
-        if (
-            existingPurchaseOrder.stockBatch.length > 0
-        ) {
-
+        // Only pending orders can be cancelled.
+        if (existingPurchaseOrder.status !== "PENDING") {
             return res.status(400).json({
-
                 error:
-                    "This purchase order is already linked to a GRN and cannot be deleted."
-
+                    `Only pending purchase orders can be cancelled. ` +
+                    `Current status: ${existingPurchaseOrder.status}.`,
             });
-
         }
 
-
-        /*
-        ============================================
-        DELETE PO ITEMS + PO
-        ============================================
-        */
-
-        await prisma.$transaction(async (tx) => {
-
-            /*
-            Delete PO items
-            */
-
-            await tx.purchaseOrderItem.deleteMany({
-
-                where: {
-
-                    purchaseOrderId:
-                        purchaseOrderId
-
-                }
-
+        // Protect existing goods-received records.
+        if (existingPurchaseOrder.stockBatch.length > 0) {
+            return res.status(400).json({
+                error:
+                    "This purchase order is linked to a GRN and cannot be cancelled.",
             });
+        }
 
-
-            /*
-            Delete Purchase Order
-            */
-
-            await tx.purchaseOrder.delete({
-
-                where: {
-
-                    id:
-                        purchaseOrderId
-
-                }
-
+        const cancelledPurchaseOrder =
+            await prisma.purchaseOrder.update({
+                where: { id: purchaseOrderId },
+                data: { status: "CANCELLED" },
+                include: {
+                    supplier: true,
+                    items: {
+                        include: {
+                            product: true,
+                        },
+                    },
+                },
             });
-
-        });
-
-
-        /*
-        ============================================
-        SUCCESS
-        ============================================
-        */
 
         return res.status(200).json({
-
-            message:
-                "Purchase order deleted successfully."
-
+            message: "Purchase order cancelled successfully.",
+            data: cancelledPurchaseOrder,
         });
-
-    }
-
-    catch (error) {
-
-        console.error(
-            "Delete Purchase Order Error:",
-            error
-        );
+    } catch (error) {
+        console.error("Cancel Purchase Order Error:", error);
 
         return res.status(500).json({
-
-            error:
-                "Failed to delete purchase order"
-
+            error: "Failed to cancel purchase order",
         });
-
     }
-
 };
