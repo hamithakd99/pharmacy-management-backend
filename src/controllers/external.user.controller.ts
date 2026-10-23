@@ -88,6 +88,7 @@ export const getoneExternalUser = async (
     }
 };
 
+
 export const getAllExternalUsers = async (
     req: Request,
     res: Response
@@ -96,24 +97,60 @@ export const getAllExternalUsers = async (
         const { page, limit, skip } = getPagination(req);
 
         const search = String(req.query.search ?? "").trim();
+        const roleParam = String(req.query.role ?? "")
+            .trim()
+            .toUpperCase();
 
-        const where: Prisma.ExternalUserWhereInput = search
-            ? {
-                  OR: [
-                      { userId: { contains: search, mode: "insensitive" } },
-                      { firstName: { contains: search, mode: "insensitive" } },
-                      { lastName: { contains: search, mode: "insensitive" } },
-                      { email: { contains: search, mode: "insensitive" } },
-                      {
-                          contactNumber: {
-                              contains: search,
-                              mode: "insensitive",
+        const role =
+            roleParam === "CUSTOMER" || roleParam === "SUPPLIER"
+                ? roleParam
+                : undefined;
+
+        const where: Prisma.ExternalUserWhereInput = {
+            ...(role ? { role } : {}),
+            ...(search
+                ? {
+                      OR: [
+                          {
+                              userId: {
+                                  contains: search,
+                                  mode: "insensitive",
+                              },
                           },
-                      },
-                      { city: { contains: search, mode: "insensitive" } },
-                  ],
-              }
-            : {};
+                          {
+                              firstName: {
+                                  contains: search,
+                                  mode: "insensitive",
+                              },
+                          },
+                          {
+                              lastName: {
+                                  contains: search,
+                                  mode: "insensitive",
+                              },
+                          },
+                          {
+                              email: {
+                                  contains: search,
+                                  mode: "insensitive",
+                              },
+                          },
+                          {
+                              contactNumber: {
+                                  contains: search,
+                                  mode: "insensitive",
+                              },
+                          },
+                          {
+                              city: {
+                                  contains: search,
+                                  mode: "insensitive",
+                              },
+                          },
+                      ],
+                  }
+                : {}),
+        };
 
         const [
             externalUsers,
@@ -131,7 +168,7 @@ export const getAllExternalUsers = async (
 
             prisma.externalUser.count({ where }),
 
-            // Summary cards: සියලු external users
+            // Global summary counts: unaffected by role or search.
             prisma.externalUser.count(),
 
             prisma.externalUser.count({
@@ -147,7 +184,6 @@ export const getAllExternalUsers = async (
 
         return res.status(200).json({
             data: externalUsers,
-
             pagination: {
                 page,
                 limit,
@@ -156,7 +192,6 @@ export const getAllExternalUsers = async (
                 hasNextPage: page < totalPages,
                 hasPreviousPage: page > 1,
             },
-
             summary: {
                 totalExternal,
                 suppliers,
