@@ -98,99 +98,89 @@ const mergeOrderItems = (
 };
 
 // =====================================================
-// FEFO Stock Allocation
+// FEFO Stock Allocation + Sale Type Pricing
 // =====================================================
 
 const allocateStockFEFO = async (
     tx: any,
-    items: OrderItemInput[]
+    items: OrderItemInput[],
+    saleType: "WHOLESALE" | "RETAIL"
 ): Promise<StockAllocation[]> => {
 
     const allocations: StockAllocation[] = [];
 
     for (const item of items) {
-
         const stockItems =
             await tx.stockBatchItem.findMany({
                 where: {
                     productId: item.productId,
-
                     availableQuantity: {
                         gt: 0
                     },
-
                     expiryDate: {
                         gt: new Date()
                     }
                 },
-
                 orderBy: {
                     expiryDate: "asc"
                 }
             });
 
-
         const totalAvailable =
             stockItems.reduce(
-                (
-                    total: number,
-                    stockItem: any
-                ) =>
-                    total +
-                    stockItem.availableQuantity,
+                (total: number, stockItem: any) =>
+                    total + stockItem.availableQuantity,
                 0
             );
 
-
         if (totalAvailable < item.quantity) {
-
             throw new Error(
                 `Insufficient stock for product ${item.productId}. Available: ${totalAvailable}, Requested: ${item.quantity}`
             );
         }
 
-
-        let remainingQuantity =
-            item.quantity;
-
+        let remainingQuantity = item.quantity;
 
         for (const stockItem of stockItems) {
-
             if (remainingQuantity <= 0) {
                 break;
             }
 
+            const quantityToTake = Math.min(
+                stockItem.availableQuantity,
+                remainingQuantity
+            );
 
-            const quantityToTake =
-                Math.min(
-                    stockItem.availableQuantity,
-                    remainingQuantity
+            // Select price based on the sale type.
+            const selectedPrice: number | null =
+                saleType === "RETAIL"
+                    ? stockItem.retailPrice
+                    : stockItem.sellingPrice;
+
+            if (
+                selectedPrice == null ||
+                !Number.isFinite(selectedPrice) ||
+                selectedPrice <= 0
+            ) {
+                throw new Error(
+                    `SELLING_PRICE_NOT_FOUND: Product ${item.productId}, batch item ${stockItem.id}, sale type ${saleType}`
                 );
-
+            }
 
             allocations.push({
-
-                productId:
-                    item.productId,
-
-                stockBatchItemId:
-                    stockItem.id,
-
-                quantity:
-                    quantityToTake,
-
-                sellingPrice:
-                    stockItem.sellingPrice
+                productId: item.productId,
+                stockBatchItemId: stockItem.id,
+                quantity: quantityToTake,
+                sellingPrice: selectedPrice
             });
 
-
-            remainingQuantity -=
-                quantityToTake;
+            remainingQuantity -= quantityToTake;
         }
     }
 
     return allocations;
 };
+
 
 
 // =====================================================
@@ -224,8 +214,26 @@ export const createOrder = async (
             items,
             discountAmount = 0,
             paymentMethod,
-            paymentStatus = "PAID"
+            paymentStatus = "PAID",
+            saleType = "WHOLESALE"
         } = req.body;
+
+        const validSaleTypes = [
+            "WHOLESALE",
+            "RETAIL"
+        ] as const;
+
+        if (
+            typeof saleType !== "string" ||
+            !validSaleTypes.includes(
+                saleType as (typeof validSaleTypes)[number]
+            )
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid sale type"
+            });
+        }
 
         // =================================================
         // Validate & Normalize Items
@@ -283,7 +291,7 @@ export const createOrder = async (
             "CASH",
             "CARD",
             "BANK_TRANSFER",
-            "OTHER"
+            "CHEQUE"
         ];
 
         if (
@@ -421,7 +429,8 @@ export const createOrder = async (
                 const stockCheckAllocations =
                     await allocateStockFEFO(
                         tx,
-                        orderItems
+                        orderItems,
+                        saleType as "WHOLESALE" | "RETAIL"
                     );
 
                 // =============================================
@@ -490,6 +499,8 @@ export const createOrder = async (
                                 authUser.userId,
 
                             status: "PENDING",
+
+                            saleType: saleType as "WHOLESALE" | "RETAIL",
 
                             paymentStatus,
 
@@ -629,220 +640,225 @@ export const createOrder = async (
 
 
 export const allOrders = async (
-  req: Request,
-  res: Response
+    req: Request,
+    res: Response
 ) => {
-  try {
-    const { page, limit, skip } = getPagination(req);
+    try {
+        const { page, limit, skip } = getPagination(req);
 
-    const search = String(req.query.search ?? "").trim();
-    const status = String(req.query.status ?? "").trim();
+        const search = String(req.query.search ?? "").trim();
+        const status = String(req.query.status ?? "").trim();
 
-    const validStatuses = [
-      "PENDING",
-      "CONFIRMED",
-      "COMPLETED",
-      "CANCELLED",
-    ] as const;
+        const validStatuses = [
+            "PENDING",
+            "CONFIRMED",
+            "COMPLETED",
+            "CANCELLED",
+        ] as const;
 
-    if (
-      status &&
-      !validStatuses.includes(status as (typeof validStatuses)[number])
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid order status",
-      });
+        if (
+            status &&
+            !validStatuses.includes(status as (typeof validStatuses)[number])
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid order status",
+            });
+        }
+
+        const where = {
+            ...(status
+                ? {
+                    status: status as
+                        | "PENDING"
+                        | "CONFIRMED"
+                        | "COMPLETED"
+                        | "CANCELLED",
+                }
+                : {}),
+
+            ...(search
+                ? {
+                    OR: [
+                        {
+                            orderNumber: {
+                                contains: search,
+                                mode: "insensitive" as const,
+                            },
+                        },
+                        {
+                            customer: {
+                                is: {
+                                    firstName: {
+                                        contains: search,
+                                        mode: "insensitive" as const,
+                                    },
+                                },
+                            },
+                        },
+                        {
+                            customer: {
+                                is: {
+                                    lastName: {
+                                        contains: search,
+                                        mode: "insensitive" as const,
+                                    },
+                                },
+                            },
+                        },
+                        {
+                            customer: {
+                                is: {
+                                    email: {
+                                        contains: search,
+                                        mode: "insensitive" as const,
+                                    },
+                                },
+                            },
+                        },
+                        {
+                            customer: {
+                                is: {
+                                    contactNumber: {
+                                        contains: search,
+                                        mode: "insensitive" as const,
+                                    },
+                                },
+                            },
+                        },
+                        {
+                            items: {
+                                some: {
+                                    product: {
+                                        name: {
+                                            contains: search,
+                                            mode: "insensitive" as const,
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    ],
+                }
+                : {}),
+        };
+
+        const [
+            total,
+            orders,
+            totalOrders,
+            pendingOrders,
+            confirmedOrders,
+            completedOrders,
+            cancelledOrders,
+            salesResult,
+        ] = await Promise.all([
+            // Current search/filter result count for pagination
+            prisma.order.count({ where }),
+
+            // Current page only
+            prisma.order.findMany({
+                where,
+                skip,
+                take: limit,
+                orderBy: {
+                    createdAt: "desc",
+                },
+                include: {
+                    customer: {
+                        select: {
+                            id: true,
+                            userId: true,
+                            firstName: true,
+                            lastName: true,
+                            email: true,
+                            contactNumber: true,
+                        },
+                    },
+                    cashier: {
+                        select: {
+                            userId: true,
+                            firstName: true,
+                            lastName: true,
+                        },
+                    },
+                    items: {
+                        include: {
+                            product: true,
+                            stockBatchItem: {
+                                select: {
+                                    expiryDate: true,
+                                },
+                            },
+                        },
+                    },
+                },
+            }),
+
+            // Global summary counts — no pagination or search/status filter
+            prisma.order.count(),
+
+            prisma.order.count({
+                where: { status: "PENDING" },
+            }),
+
+            prisma.order.count({
+                where: { status: "CONFIRMED" },
+            }),
+
+            prisma.order.count({
+                where: { status: "COMPLETED" },
+            }),
+
+            prisma.order.count({
+                where: { status: "CANCELLED" },
+            }),
+
+            // Global sales total using the existing card's business rule
+            prisma.order.aggregate({
+                where: {
+                    status: {
+                        in: ["CONFIRMED", "COMPLETED"],
+                    },
+                },
+                _sum: {
+                    totalAmount: true,
+                },
+            }),
+        ]);
+
+        const totalPages = Math.ceil(total / limit);
+
+        return res.status(200).json({
+            success: true,
+            data: orders,
+
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages,
+                hasNextPage: page < totalPages,
+                hasPreviousPage: page > 1,
+            },
+
+            stats: {
+                totalOrders,
+                pendingOrders,
+                confirmedOrders,
+                completedOrders,
+                cancelledOrders,
+                totalSales: Number(salesResult._sum.totalAmount ?? 0),
+            },
+        });
+    } catch (error) {
+        console.error("Get all orders error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to get orders",
+        });
     }
-
-    const where = {
-      ...(status
-        ? {
-            status: status as
-              | "PENDING"
-              | "CONFIRMED"
-              | "COMPLETED"
-              | "CANCELLED",
-          }
-        : {}),
-
-      ...(search
-        ? {
-            OR: [
-              {
-                orderNumber: {
-                  contains: search,
-                  mode: "insensitive" as const,
-                },
-              },
-              {
-                customer: {
-                  is: {
-                    firstName: {
-                      contains: search,
-                      mode: "insensitive" as const,
-                    },
-                  },
-                },
-              },
-              {
-                customer: {
-                  is: {
-                    lastName: {
-                      contains: search,
-                      mode: "insensitive" as const,
-                    },
-                  },
-                },
-              },
-              {
-                customer: {
-                  is: {
-                    email: {
-                      contains: search,
-                      mode: "insensitive" as const,
-                    },
-                  },
-                },
-              },
-              {
-                customer: {
-                  is: {
-                    contactNumber: {
-                      contains: search,
-                      mode: "insensitive" as const,
-                    },
-                  },
-                },
-              },
-              {
-                items: {
-                  some: {
-                    product: {
-                      name: {
-                        contains: search,
-                        mode: "insensitive" as const,
-                      },
-                    },
-                  },
-                },
-              },
-            ],
-          }
-        : {}),
-    };
-
-    const [
-      total,
-      orders,
-      totalOrders,
-      pendingOrders,
-      confirmedOrders,
-      completedOrders,
-      cancelledOrders,
-      salesResult,
-    ] = await Promise.all([
-      // Current search/filter result count for pagination
-      prisma.order.count({ where }),
-
-      // Current page only
-      prisma.order.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: {
-          createdAt: "desc",
-        },
-        include: {
-          customer: {
-            select: {
-              id: true,
-              userId: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-              contactNumber: true,
-            },
-          },
-          cashier: {
-            select: {
-              userId: true,
-              firstName: true,
-              lastName: true,
-            },
-          },
-          items: {
-            include: {
-              product: true,
-            },
-          },
-        },
-      }),
-
-      // Global summary counts — no pagination or search/status filter
-      prisma.order.count(),
-
-      prisma.order.count({
-        where: { status: "PENDING" },
-      }),
-
-      prisma.order.count({
-        where: { status: "CONFIRMED" },
-      }),
-
-      prisma.order.count({
-        where: { status: "COMPLETED" },
-      }),
-
-      prisma.order.count({
-        where: { status: "CANCELLED" },
-      }),
-
-      // Global sales total using the existing card's business rule
-      prisma.order.aggregate({
-        where: {
-          status: {
-            in: ["CONFIRMED", "COMPLETED"],
-          },
-        },
-        _sum: {
-          totalAmount: true,
-        },
-      }),
-    ]);
-
-    const totalPages = Math.ceil(total / limit);
-
-    return res.status(200).json({
-      success: true,
-      data: orders,
-
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages,
-        hasNextPage: page < totalPages,
-        hasPreviousPage: page > 1,
-      },
-
-      stats: {
-        totalOrders,
-        pendingOrders,
-        confirmedOrders,
-        completedOrders,
-        cancelledOrders,
-        totalSales: Number(salesResult._sum.totalAmount ?? 0),
-      },
-    });
-  } catch (error) {
-    console.error("Get all orders error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to get orders",
-    });
-  }
 };
 
 
@@ -954,7 +970,7 @@ export const updateOrderPayment = async (req: Request, res: Response) => {
             "CASH",
             "CARD",
             "BANK_TRANSFER",
-            "OTHER"
+            "CHEQUE"
         ];
 
         if (
@@ -1257,6 +1273,111 @@ export const cancelOrder = async (
     }
 };
 
+
+type ConfirmationAllocation = {
+    productId: number;
+    stockBatchItemId: number;
+    quantity: number;
+    sellingPrice: number;
+};
+
+const allocateStockFEFOPreservingPrices = async (
+    tx: any,
+    pendingItems: {
+        productId: number;
+        quantity: number;
+        sellingPrice: number;
+    }[]
+): Promise<ConfirmationAllocation[]> => {
+    const productIds = [
+        ...new Set(pendingItems.map((item) => item.productId))
+    ];
+
+    const stockItems = await tx.stockBatchItem.findMany({
+        where: {
+            productId: { in: productIds },
+            availableQuantity: { gt: 0 },
+            expiryDate: { gt: new Date() }
+        },
+        orderBy: [
+            { expiryDate: "asc" },
+            { id: "asc" }
+        ]
+    });
+
+    // Track remaining stock in memory so multiple pending
+    // items cannot allocate the same stock twice.
+    const remainingStock = new Map<number, number>();
+
+    for (const stockItem of stockItems) {
+        remainingStock.set(
+            stockItem.id,
+            stockItem.availableQuantity
+        );
+    }
+
+    const allocations: ConfirmationAllocation[] = [];
+
+    // Keep each pending order item's saved price.
+    // Do not replace it with the current batch price.
+    for (const item of pendingItems) {
+        const savedPrice = Number(item.sellingPrice);
+
+        if (
+            !Number.isFinite(savedPrice) ||
+            savedPrice < 0
+        ) {
+            throw new Error(
+                `SELLING_PRICE_NOT_FOUND: Product ${item.productId}`
+            );
+        }
+
+        let quantityRemaining = item.quantity;
+
+        const productStockItems = stockItems.filter(
+            (stockItem: any) =>
+                stockItem.productId === item.productId
+        );
+
+        for (const stockItem of productStockItems) {
+            if (quantityRemaining <= 0) break;
+
+            const available =
+                remainingStock.get(stockItem.id) ?? 0;
+
+            if (available <= 0) continue;
+
+            const quantityToTake = Math.min(
+                available,
+                quantityRemaining
+            );
+
+            allocations.push({
+                productId: item.productId,
+                stockBatchItemId: stockItem.id,
+                quantity: quantityToTake,
+                sellingPrice: savedPrice
+            });
+
+            remainingStock.set(
+                stockItem.id,
+                available - quantityToTake
+            );
+
+            quantityRemaining -= quantityToTake;
+        }
+
+        if (quantityRemaining > 0) {
+            throw new Error(
+                `Insufficient stock for product ${item.productId}`
+            );
+        }
+    }
+
+    return allocations;
+};
+
+
 export const updateOrderStatus = async (req: Request, res: Response) => {
     try {
         const orderId = Number(req.params.id);
@@ -1345,31 +1466,19 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
                 // Validate pending order items
                 // ---------------------------------------------
 
-                const orderItems: OrderItemInput[] =
-                    order.items.map((item) => ({
-                        productId: item.productId,
-                        quantity: item.quantity
-                    }));
 
-                // ---------------------------------------------
-                // Merge duplicate products if any
-                // ---------------------------------------------
-
-                const mergedItems =
-                    mergeOrderItems(orderItems);
-
-                // ---------------------------------------------
-                // FEFO allocation
-                //
-                // This checks available stock and determines
-                // which batches should be used.
-                // ---------------------------------------------
+                const pendingItems = order.items.map((item) => ({
+                    productId: item.productId,
+                    quantity: item.quantity,
+                    sellingPrice: item.sellingPrice
+                }));
 
                 const allocations =
-                    await allocateStockFEFO(
+                    await allocateStockFEFOPreservingPrices(
                         tx,
-                        mergedItems
+                        pendingItems
                     );
+
                 // console.log("CONFIRM ORDER:", order.id);
                 // console.log("ALLOCATIONS:", allocations);
 
