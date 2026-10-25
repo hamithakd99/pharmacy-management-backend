@@ -7,6 +7,7 @@ type OpeningStockItemInput = {
     receivedQuantity: number;
     buyingPrice: number;
     sellingPrice: number;
+    retailPrice?: number | string | null;
     expiryDate: string;
     manufacturingDate?: string | null;
 };
@@ -83,6 +84,19 @@ export const createOpeningStockService = async (
                 success: false,
                 statusCode: 400,
                 message: `Row ${row}: Selling price must be zero or greater.`
+            };
+        }
+
+        if (
+            item.retailPrice != null &&
+            item.retailPrice !== "" &&
+            (!Number.isFinite(Number(item.retailPrice)) ||
+                Number(item.retailPrice) < 0)
+        ) {
+            return {
+                success: false,
+                statusCode: 400,
+                message: `Row ${row}: Retail price must be zero or greater.`,
             };
         }
 
@@ -176,6 +190,11 @@ export const createOpeningStockService = async (
                         availableQuantity: item.receivedQuantity,
                         buyingPrice: item.buyingPrice,
                         sellingPrice: item.sellingPrice,
+                        retailPrice:
+                            item.retailPrice == null ||
+                                item.retailPrice === ""
+                                ? null
+                                : Number(item.retailPrice),
                         expiryDate: new Date(item.expiryDate),
                         manufacturingDate: item.manufacturingDate
                             ? new Date(item.manufacturingDate)
@@ -216,6 +235,7 @@ export const createOpeningStockService = async (
                 availableQuantity: item.availableQuantity,
                 buyingPrice: item.buyingPrice,
                 sellingPrice: item.sellingPrice,
+                retailPrice: item.retailPrice,
                 expiryDate: item.expiryDate
             }))
         }

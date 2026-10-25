@@ -84,6 +84,7 @@ export const getGRNHistory = (
                         receivedQuantity: item.receivedQuantity,
                         buyingPrice: item.buyingPrice,
                         sellingPrice: item.sellingPrice,
+                        retailPrice: item.retailPrice ?? "",
                         lineBuyingTotal: item.receivedQuantity * item.buyingPrice,
                         lineSellingTotal: item.receivedQuantity * item.sellingPrice,
                         expiryDate: item.expiryDate,

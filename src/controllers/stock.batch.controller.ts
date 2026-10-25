@@ -559,6 +559,12 @@ export const createNewBatch = async (
                             availableQuantity: Number(item.receivedQuantity),
                             buyingPrice: Number(item.buyingPrice),
                             sellingPrice: Number(item.sellingPrice),
+                            retailPrice:
+                                item.retailPrice === "" ||
+                                    item.retailPrice === undefined ||
+                                    item.retailPrice === null
+                                    ? null
+                                    : Number(item.retailPrice),
                             expiryDate: item.expiryDate,
                             manufacturingDate: item.manufacturingDate ?? null
 
@@ -605,165 +611,165 @@ export const createNewBatch = async (
 
 
 export const getStockBatches = async (
-  req: Request,
-  res: Response
+    req: Request,
+    res: Response
 ) => {
-  try {
-    const { page, limit, skip } = getPagination(req);
+    try {
+        const { page, limit, skip } = getPagination(req);
 
-    const search = String(req.query.search ?? "").trim();
-    const paymentStatus = String(req.query.paymentStatus ?? "").trim();
+        const search = String(req.query.search ?? "").trim();
+        const paymentStatus = String(req.query.paymentStatus ?? "").trim();
 
-    const where = {
-      ...(paymentStatus
-        ? { paymentStatus: paymentStatus as any }
-        : {}),
-      ...(search
-        ? {
-            OR: [
-              {
-                batchNumber: {
-                  contains: search,
-                  mode: "insensitive" as const,
-                },
-              },
-              {
-                invoiceNumber: {
-                  contains: search,
-                  mode: "insensitive" as const,
-                },
-              },
-              {
-                supplier: {
-                  is: {
-                    firstName: {
-                      contains: search,
-                      mode: "insensitive" as const,
-                    },
-                  },
-                },
-              },
-              {
-                supplier: {
-                  is: {
-                    lastName: {
-                      contains: search,
-                      mode: "insensitive" as const,
-                    },
-                  },
-                },
-              },
-            ],
-          }
-        : {}),
-    };
+        const where = {
+            ...(paymentStatus
+                ? { paymentStatus: paymentStatus as any }
+                : {}),
+            ...(search
+                ? {
+                    OR: [
+                        {
+                            batchNumber: {
+                                contains: search,
+                                mode: "insensitive" as const,
+                            },
+                        },
+                        {
+                            invoiceNumber: {
+                                contains: search,
+                                mode: "insensitive" as const,
+                            },
+                        },
+                        {
+                            supplier: {
+                                is: {
+                                    firstName: {
+                                        contains: search,
+                                        mode: "insensitive" as const,
+                                    },
+                                },
+                            },
+                        },
+                        {
+                            supplier: {
+                                is: {
+                                    lastName: {
+                                        contains: search,
+                                        mode: "insensitive" as const,
+                                    },
+                                },
+                            },
+                        },
+                    ],
+                }
+                : {}),
+        };
 
-    // Today's date boundaries (server local timezone)
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+        // Today's date boundaries (server local timezone)
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
 
-    const tomorrowStart = new Date(todayStart);
-    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+        const tomorrowStart = new Date(todayStart);
+        tomorrowStart.setDate(tomorrowStart.getDate() + 1);
 
-    const todayWhere = {
-      receivedDate: {
-        gte: todayStart,
-        lt: tomorrowStart,
-      },
-    };
-
-    const [
-      total,
-      stockBatches,
-      totalGRNs,
-      todaysGRNs,
-      pendingPayments,
-      todaysBatches,
-    ] = await Promise.all([
-      // Filtered total for pagination
-      prisma.stockBatch.count({ where }),
-
-      // Only current page's data
-      prisma.stockBatch.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { id: "desc" },
-        include: {
-          supplier: true,
-          purchaseOrder: {
-            select: { orderNumber: true },
-          },
-          items: true,
-        },
-      }),
-
-      // Global summary counts - independent of pagination and filters
-      prisma.stockBatch.count(),
-
-      prisma.stockBatch.count({
-        where: todayWhere,
-      }),
-
-      prisma.stockBatch.count({
-        where: {
-          paymentStatus: "PENDING",
-        },
-      }),
-
-      // All batches received today, including all their items
-      prisma.stockBatch.findMany({
-        where: todayWhere,
-        select: {
-          items: {
-            select: {
-              receivedQuantity: true,
+        const todayWhere = {
+            receivedDate: {
+                gte: todayStart,
+                lt: tomorrowStart,
             },
-          },
-        },
-      }),
-    ]);
+        };
 
-    const itemsReceivedToday = todaysBatches.reduce(
-      (batchTotal, batch) =>
-        batchTotal +
-        batch.items.reduce(
-          (itemTotal, item) => itemTotal + item.receivedQuantity,
-          0
-        ),
-      0
-    );
+        const [
+            total,
+            stockBatches,
+            totalGRNs,
+            todaysGRNs,
+            pendingPayments,
+            todaysBatches,
+        ] = await Promise.all([
+            // Filtered total for pagination
+            prisma.stockBatch.count({ where }),
 
-    const totalPages = Math.ceil(total / limit);
+            // Only current page's data
+            prisma.stockBatch.findMany({
+                where,
+                skip,
+                take: limit,
+                orderBy: { id: "desc" },
+                include: {
+                    supplier: true,
+                    purchaseOrder: {
+                        select: { orderNumber: true },
+                    },
+                    items: true,
+                },
+            }),
 
-    return res.status(200).json({
-      message: "Stock batches retrieved successfully",
+            // Global summary counts - independent of pagination and filters
+            prisma.stockBatch.count(),
 
-      data: stockBatches,
+            prisma.stockBatch.count({
+                where: todayWhere,
+            }),
 
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages,
-        hasNextPage: page < totalPages,
-        hasPreviousPage: page > 1,
-      },
+            prisma.stockBatch.count({
+                where: {
+                    paymentStatus: "PENDING",
+                },
+            }),
 
-      stats: {
-        totalGRNs,
-        todaysGRNs,
-        pendingPayments,
-        itemsReceivedToday,
-      },
-    });
-  } catch (error) {
-    console.error("Error retrieving stock batches:", error);
+            // All batches received today, including all their items
+            prisma.stockBatch.findMany({
+                where: todayWhere,
+                select: {
+                    items: {
+                        select: {
+                            receivedQuantity: true,
+                        },
+                    },
+                },
+            }),
+        ]);
 
-    return res.status(500).json({
-      message: "Error retrieving stock batches",
-    });
-  }
+        const itemsReceivedToday = todaysBatches.reduce(
+            (batchTotal, batch) =>
+                batchTotal +
+                batch.items.reduce(
+                    (itemTotal, item) => itemTotal + item.receivedQuantity,
+                    0
+                ),
+            0
+        );
+
+        const totalPages = Math.ceil(total / limit);
+
+        return res.status(200).json({
+            message: "Stock batches retrieved successfully",
+
+            data: stockBatches,
+
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages,
+                hasNextPage: page < totalPages,
+                hasPreviousPage: page > 1,
+            },
+
+            stats: {
+                totalGRNs,
+                todaysGRNs,
+                pendingPayments,
+                itemsReceivedToday,
+            },
+        });
+    } catch (error) {
+        console.error("Error retrieving stock batches:", error);
+
+        return res.status(500).json({
+            message: "Error retrieving stock batches",
+        });
+    }
 };
 
 
@@ -876,6 +882,12 @@ export const updateStockBatch = async (
                             receivedQuantity: item.receivedQuantity ?? undefined,
                             buyingPrice: item.buyingPrice ?? undefined,
                             sellingPrice: item.sellingPrice ?? undefined,
+                            ...(item.retailPrice !== undefined && {
+                                retailPrice:
+                                    item.retailPrice === "" || item.retailPrice === null
+                                        ? null
+                                        : Number(item.retailPrice),
+                            }),
                             ...(item.expiryDate ?
                                 {
                                     expiryDate: new Date(item.expiryDate)
@@ -951,6 +963,12 @@ export const createBulkOpeningStock = async (
                 receivedQuantity: Number(item.receivedQuantity),
                 buyingPrice: Number(item.buyingPrice),
                 sellingPrice: Number(item.sellingPrice),
+                retailPrice:
+                    item.retailPrice === "" ||
+                        item.retailPrice === undefined ||
+                        item.retailPrice === null
+                        ? null
+                        : Number(item.retailPrice),
                 expiryDate: item.expiryDate,
                 manufacturingDate: item.manufacturingDate ?? null
             }))

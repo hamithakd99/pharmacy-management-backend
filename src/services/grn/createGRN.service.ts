@@ -20,6 +20,7 @@ type CreateGRNInput = {
         receivedQuantity: number;
         buyingPrice: number;
         sellingPrice: number;
+        retailPrice?: number | null;
         expiryDate: string;
         manufacturingDate?: string | null;
 
@@ -166,6 +167,10 @@ export const createGRNService = async (
                                             availableQuantity: Number(item.receivedQuantity),
                                             buyingPrice: Number(item.buyingPrice),
                                             sellingPrice: Number(item.sellingPrice),
+                                            retailPrice:
+                                                item.retailPrice == null || item.retailPrice === ("" as any)
+                                                    ? null
+                                                    : Number(item.retailPrice),
                                             expiryDate: new Date(item.expiryDate),
                                             manufacturingDate: item.manufacturingDate ? new Date(item.manufacturingDate) : null
 
@@ -181,14 +186,14 @@ export const createGRNService = async (
                         }
 
                     });
-                    await tx.stockMovement.createMany({
-                        data: newStockBatch.items.map((item) => ({
-                            stockBatchItemId: item.id,
-                            productId: item.productId,
-                            type: "GRN",
-                            quantity: item.receivedQuantity
-                        }))
-                    });
+                await tx.stockMovement.createMany({
+                    data: newStockBatch.items.map((item) => ({
+                        stockBatchItemId: item.id,
+                        productId: item.productId,
+                        type: "GRN",
+                        quantity: item.receivedQuantity
+                    }))
+                });
 
 
                 return newStockBatch;

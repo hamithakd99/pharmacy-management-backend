@@ -127,6 +127,7 @@ model StockBatchItem {
 
   buyingPrice Float
   sellingPrice Float
+  retailPrice    Float?
 
   expiryDate DateTime
   manufacturingDate DateTime?
@@ -174,6 +175,8 @@ model Order {
     status OrderStatus @default(COMPLETED)
     paymentStatus OrderPaymentStatus @default(PENDING)
     paymentMethod PaymentMethod?
+
+    saleType SaleType @default(WHOLESALE)
 
     subtotal Float @default(0)
     discountAmount Float @default(0)
@@ -258,7 +261,7 @@ enum PaymentMethod {
     CASH
     CARD
     BANK_TRANSFER
-    OTHER
+    CHEQUE
 }
 
 enum Role {
@@ -314,4 +317,9 @@ enum PurchaseOrderStatus {
   PARTIALLY_RECEIVED
   COMPLETED
   CANCELLED
+}
+
+enum SaleType {
+  WHOLESALE
+  RETAIL
 }
