@@ -1,55 +1,47 @@
-import type { DosageForm } from "../../generated/prisma/enums";
+import { prisma } from "../../lib/prisma"; 
 
+export const generateProductCode = async (
+  name: string,
+  dosageForm: string | null,
+  strengthValue: string | null,
+  strengthUnit: string | null,
+  dimensionsValue: string | null,
+  dimensionsUnit: string | null
+): Promise<string> => {
+  const prefix = name.substring(0, 3).toUpperCase().padEnd(3, "X");
+  const formChar = dosageForm ? dosageForm.charAt(0).toUpperCase() : "G";
 
-export const generateProductCode = (
-    name: string,
-    dosageForm: DosageForm,
-    strengthValue: number
-) => {
+  let suffix = "";
+  
+  if (strengthValue) {
 
-    const productPrefix = name
-        .trim()
-        .substring(0, 3)
-        .toUpperCase();
+    const val = strengthValue.replace(/[^0-9.]/g, ""); 
+    const unit = strengthUnit ? strengthUnit.toUpperCase() : "";
+    suffix = `-${val}${unit}`;
+    
+  } else if (dimensionsValue) {
+    const val = dimensionsValue.replace(/[^0-9.]/g, "");
+    const unit = dimensionsUnit ? dimensionsUnit.toUpperCase() : "";
+    suffix = `-${val}${unit}`;
+  }
 
-    let dosageCode = "";
+  const baseCode = `${prefix}-${formChar}${suffix}`;
 
-    switch (dosageForm) {
-        case "TABLET":
-            dosageCode = "T";
-            break;
+  let uniqueCode = baseCode;
+  let counter = 1;
 
-        case "CAPSULE":
-            dosageCode = "C";
-            break;
+  while (true) {
+    const existingProduct = await prisma.product.findUnique({
+      where: { productId: uniqueCode },
+    });
 
-        case "SYRUP":
-            dosageCode = "S";
-            break;
-
-        case "INJECTION":
-            dosageCode = "I";
-            break;
-
-        case "CREAM":
-            dosageCode = "CR";
-            break;
-
-        case "OINTMENT":
-            dosageCode = "O";
-            break;
-
-        case "DROPS":
-            dosageCode = "D";
-            break;
-
-        default:
-            dosageCode = "X";
+    if (!existingProduct) {
+      break;
     }
 
-    return `${productPrefix}-${dosageCode}${strengthValue
-        .toString()
-        .padStart(5, "0")}`;
-};
+    uniqueCode = `${baseCode}-${counter}`;
+    counter++;
+  }
 
-export default generateProductCode;
+  return uniqueCode;
+};

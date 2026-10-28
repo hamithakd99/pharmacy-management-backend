@@ -13,7 +13,7 @@ export const createUser = async (req: Request, res: Response) => {
                 userId: await generateExUserCode(req.body.role),
                 firstName: req.body.firstName,
                 lastName: req.body.lastName,
-                email: req.body.email,
+                email: req.body.email?.trim() || null,
                 role: req.body.role,
                 contactNumber: req.body.contactNumber,
                 addressLine1: req.body.addressLine1,
@@ -207,35 +207,55 @@ export const getAllExternalUsers = async (
     }
 };
 
+
 export const updateExternalUser = async (
     req: Request,
     res: Response
 ) => {
     try {
         const exuserId = Number(req.params.id);
-        const updateExUser = { ...req.body };
 
-        if (req.body.role) {
-        return res.status(400).json({
-            message: "Role cannot be updated"
-        });
+        if (!Number.isInteger(exuserId) || exuserId <= 0) {
+            return res.status(400).json({
+                message: "Invalid external user ID",
+            });
         }
 
+        const { role, email, ...otherFields } = req.body;
+
+        if (role !== undefined) {
+            return res.status(400).json({
+                message: "Role cannot be updated",
+            });
+        }
+
+        const updateData = {
+            ...otherFields,
+            ...(email !== undefined
+                ? { email: email?.trim() || null }
+                : {}),
+        };
+
         const user = await prisma.externalUser.update({
-            where : {
-                id : exuserId
+            where: {
+                id: exuserId,
             },
-            data : updateExUser
-        })
+            data: updateData,
+        });
+
         return res.status(200).json({
-            message : "External user updated successfully",
-            user
+            message: "External user updated successfully",
+            user,
         });
     } catch (error) {
         console.error("Error updating external user:", error);
-        res.status(500).json({ error: "Failed to update external user" });
+
+        return res.status(500).json({
+            error: "Failed to update external user",
+        });
     }
-}
+};
+
 
 export const deleteExternalUser = async (
     req: Request,

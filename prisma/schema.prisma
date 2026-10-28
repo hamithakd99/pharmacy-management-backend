@@ -37,7 +37,7 @@ model ExternalUser {
   userId String @unique
   firstName  String
   lastName  String
-  email String  @unique
+  email String?  @unique
   role ExternalUserRole @default(CUSTOMER)
   contactNumber String
   nickName String?
@@ -63,9 +63,12 @@ model Product {
   brand String?
   description String?
 
-  strengthValue Float? //remove optional "?" for development, add it back for production
+  strengthValue String?
   strengthUnit StrengthUnit?
   dosageForm DosageForm?
+
+  dimensionsValue String?
+  dimensionsUnit  DimensionUnit?
 
   packSize Int?
 
@@ -296,9 +299,12 @@ enum ExternalUserRole {
 }
 
 enum StrengthUnit {
+  MCG
   MG
-  ML
+  KG
   G
+  ML
+  L
 }
 
 enum DosageForm {
@@ -309,6 +315,14 @@ enum DosageForm {
   CREAM
   OINTMENT
   DROPS
+  SOLUTION
+  SERUM
+  SACHET
+  GEL
+  LOTION
+  POWDER
+  MOUTHWASH
+  OTHER
 }
 
 enum PurchaseOrderStatus {
@@ -322,4 +336,13 @@ enum PurchaseOrderStatus {
 enum SaleType {
   WHOLESALE
   RETAIL
+}
+
+enum DimensionUnit {
+  MM
+  CM
+  M
+  INCH
+  FEET
+  YARDS
 }

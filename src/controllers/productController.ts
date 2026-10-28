@@ -1,36 +1,164 @@
 import type { Request, Response } from "express";
 import { prisma } from "../../lib/prisma"
-import generateProductCode from "../utils/generateProductCode";
 import { getPagination } from "../utils/pagination";
+import { DimensionUnit, DosageForm, StrengthUnit } from "../../generated/prisma/enums";
+import { Prisma } from "../../generated/prisma/client";
+import { generateProductCode } from "../utils/generateProductCode";
+
 
 export const createProduct = async (
-    req: Request,
-    res: Response
+  req: Request,
+  res: Response
 ) => {
-    try {
+  try {
+    const {
+      name,
+      brand,
+      categoryId,
+      description,
+      dosageForm,
+      strengthValue,
+      strengthUnit,
+      dimensionsValue,
+      dimensionsUnit,
+      packSize,
+    } = req.body;
 
-        const newproduct = await prisma.product.create({
-            data: {
-                productId: await generateProductCode(req.body.name, req.body.dosageForm, req.body.strengthValue),
-                name: req.body.name,
-                brand: req.body.brand,
-                categoryId: req.body.categoryId,
-                description: req.body.description,
-                dosageForm: req.body.dosageForm,
-                strengthValue: req.body.strengthValue,
-                strengthUnit: req.body.strengthUnit,
-                packSize: req.body.packSize
-            }
-        })
-        return res.status(201).json({
-            message: `${newproduct.name} created successfully`,
-            data: newproduct
-        });
-    } catch (error) {
-        console.error("Error creating product:", error);
-        return res.status(500).json({ error: "Failed to create product" });
+    // Validate product name
+    if (typeof name !== "string" || !name.trim()) {
+      return res.status(400).json({
+        error: "Product name is required",
+      });
     }
-}
+
+    // Validate optional enum fields
+    if (
+      dosageForm != null &&
+      dosageForm !== "" &&
+      !Object.values(DosageForm).includes(dosageForm as DosageForm)
+    ) {
+      return res.status(400).json({
+        error: "Invalid dosage form",
+      });
+    }
+
+    if (
+      strengthUnit != null &&
+      strengthUnit !== "" &&
+      !Object.values(StrengthUnit).includes(strengthUnit as StrengthUnit)
+    ) {
+      return res.status(400).json({
+        error: "Invalid strength unit",
+      });
+    }
+
+    if (
+      dimensionsUnit != null &&
+      dimensionsUnit !== "" &&
+      !Object.values(DimensionUnit).includes(dimensionsUnit as DimensionUnit)
+    ) {
+      return res.status(400).json({
+        error: "Invalid dimensions unit",
+      });
+    }
+
+    const parsedCategoryId =
+      categoryId == null || categoryId === ""
+        ? null
+        : Number(categoryId);
+
+    const parsedPackSize =
+      packSize == null || packSize === ""
+        ? null
+        : Number(packSize);
+
+    if (
+      parsedCategoryId !== null &&
+      (!Number.isInteger(parsedCategoryId) || parsedCategoryId <= 0)
+    ) {
+      return res.status(400).json({
+        error: "Invalid category ID",
+      });
+    }
+
+    if (
+      parsedPackSize !== null &&
+      (!Number.isInteger(parsedPackSize) || parsedPackSize <= 0)
+    ) {
+      return res.status(400).json({
+        error: "Pack size must be a positive integer",
+      });
+    }
+
+    const normalizedStrengthValue =
+      strengthValue == null || strengthValue === ""
+        ? null
+        : String(strengthValue).trim();
+
+    const normalizedDimensionsValue =
+      dimensionsValue == null || dimensionsValue === ""
+        ? null
+        : String(dimensionsValue).trim();
+
+    // 1. Transaction එකක් නැතිව මුලින්ම Product ID එක Generate කරගැනීම
+    const productId = await generateProductCode(
+      name.trim(),
+      dosageForm || null,
+      normalizedStrengthValue,
+      strengthUnit || null,
+      normalizedDimensionsValue,
+      dimensionsUnit || null
+    );
+
+    // 2. Generate වූ ID එක යොදාගෙන කෙලින්ම Product එක Create කිරීම
+    const newProduct = await prisma.product.create({
+      data: {
+        productId, // මෙතනට අලුත් code එක එනවා (උදා: PAN-T-500MG)
+        name: name.trim(),
+        brand: brand || null,
+        categoryId: parsedCategoryId,
+        description: description || null,
+        dosageForm: dosageForm || null,
+        strengthValue: normalizedStrengthValue,
+        strengthUnit: strengthUnit || null,
+        dimensionsValue: normalizedDimensionsValue,
+        dimensionsUnit: dimensionsUnit || null,
+        packSize: parsedPackSize,
+      },
+    });
+
+    return res.status(201).json({
+      message: `${newProduct.name} created successfully`,
+      data: newProduct,
+    });
+  } catch (error) {
+    console.error("Error creating product:", error);
+
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return res.status(409).json({
+        error: "A product with this unique identifier already exists",
+      });
+    }
+
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2003"
+    ) {
+      return res.status(400).json({
+        error: "Invalid category reference",
+      });
+    }
+
+    return res.status(500).json({
+      error: "Failed to create product",
+    });
+  }
+};
+
+
 
 
 export const getAllProducts = async (
@@ -259,29 +387,212 @@ export const getOneProduct = async (
     }
 }
 
-export const updateProduct = async (
-    req: Request,
-    res: Response
-) => {
-    try {
-        const id = Number(req.params.id);
-        const product = { ...req.body };
 
-        const updateProduct = await prisma.product.update({
-            where: {
-                id: id
-            },
-            data: product
-        });
-        return res.status(200).json({
-            message: `${updateProduct.name} updated successfully`,
-            data: updateProduct
-        });
-    } catch (error) {
-        console.error("Error updating product:", error);
-        return res.status(500).json({ error: "Failed to update product" });
+export const updateProduct = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const id = Number(req.params.id);
+
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({
+        error: "Invalid product ID",
+      });
     }
-}
+
+    const {
+      name,
+      brand,
+      categoryId,
+      description,
+      dosageForm,
+      strengthValue,
+      strengthUnit,
+      dimensionsValue,
+      dimensionsUnit,
+      packSize,
+      reorderLevel,
+      isActive,
+    } = req.body;
+
+    const data: Prisma.ProductUpdateInput = {};
+
+    if (name !== undefined) {
+      if (typeof name !== "string" || !name.trim()) {
+        return res.status(400).json({
+          error: "Product name cannot be empty",
+        });
+      }
+
+      data.name = name.trim();
+    }
+
+    if (brand !== undefined) {
+      data.brand = brand || null;
+    }
+
+    if (description !== undefined) {
+      data.description = description || null;
+    }
+
+    if (categoryId !== undefined) {
+      if (categoryId === "" || categoryId === null) {
+        data.category = { disconnect: true };
+      } else {
+        const parsedCategoryId = Number(categoryId);
+
+        if (
+          !Number.isInteger(parsedCategoryId) ||
+          parsedCategoryId <= 0
+        ) {
+          return res.status(400).json({
+            error: "Invalid category ID",
+          });
+        }
+
+        data.category = {
+          connect: { id: parsedCategoryId },
+        };
+      }
+    }
+
+    if (dosageForm !== undefined) {
+      if (
+        dosageForm !== null &&
+        dosageForm !== "" &&
+        !Object.values(DosageForm).includes(dosageForm)
+      ) {
+        return res.status(400).json({
+          error: "Invalid dosage form",
+        });
+      }
+
+      data.dosageForm = dosageForm || null;
+    }
+
+    if (strengthValue !== undefined) {
+      data.strengthValue =
+        strengthValue === "" || strengthValue === null
+          ? null
+          : String(strengthValue).trim();
+    }
+
+    if (strengthUnit !== undefined) {
+      if (
+        strengthUnit !== null &&
+        strengthUnit !== "" &&
+        !Object.values(StrengthUnit).includes(strengthUnit)
+      ) {
+        return res.status(400).json({
+          error: "Invalid strength unit",
+        });
+      }
+
+      data.strengthUnit = strengthUnit || null;
+    }
+
+    if (dimensionsValue !== undefined) {
+      data.dimensionsValue =
+        dimensionsValue === "" || dimensionsValue === null
+          ? null
+          : String(dimensionsValue).trim();
+    }
+
+    if (dimensionsUnit !== undefined) {
+      if (
+        dimensionsUnit !== null &&
+        dimensionsUnit !== "" &&
+        !Object.values(DimensionUnit).includes(dimensionsUnit)
+      ) {
+        return res.status(400).json({
+          error: "Invalid dimensions unit",
+        });
+      }
+
+      data.dimensionsUnit = dimensionsUnit || null;
+    }
+
+    if (packSize !== undefined) {
+      if (packSize === "" || packSize === null) {
+        data.packSize = null;
+      } else {
+        const parsedPackSize = Number(packSize);
+
+        if (
+          !Number.isInteger(parsedPackSize) ||
+          parsedPackSize <= 0
+        ) {
+          return res.status(400).json({
+            error: "Pack size must be a positive integer",
+          });
+        }
+
+        data.packSize = parsedPackSize;
+      }
+    }
+
+    if (reorderLevel !== undefined) {
+      const parsedReorderLevel = Number(reorderLevel);
+
+      if (
+        !Number.isInteger(parsedReorderLevel) ||
+        parsedReorderLevel < 0
+      ) {
+        return res.status(400).json({
+          error: "Reorder level must be a non-negative integer",
+        });
+      }
+
+      data.reorderLevel = parsedReorderLevel;
+    }
+
+    if (isActive !== undefined) {
+      if (typeof isActive !== "boolean") {
+        return res.status(400).json({
+          error: "isActive must be a boolean",
+        });
+      }
+
+      data.isActive = isActive;
+    }
+
+    const updatedProduct = await prisma.product.update({
+      where: { id },
+      data,
+    });
+
+    return res.status(200).json({
+      message: `${updatedProduct.name} updated successfully`,
+      data: updatedProduct,
+    });
+  } catch (error) {
+    console.error("Error updating product:", error);
+
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2025"
+    ) {
+      return res.status(404).json({
+        error: "Product not found",
+      });
+    }
+
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2003"
+    ) {
+      return res.status(400).json({
+        error: "Invalid category reference",
+      });
+    }
+
+    return res.status(500).json({
+      error: "Failed to update product",
+    });
+  }
+};
+
 
 export const deleteProduct = async (
     req: Request,
